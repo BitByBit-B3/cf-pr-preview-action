@@ -22712,6 +22712,152 @@ var require_github = __commonJS((exports2) => {
   exports2.getOctokit = getOctokit;
 });
 
+// node_modules/jsonc-parser/lib/umd/main.js
+var require_main2 = __commonJS((exports2, module2) => {
+  (function(factory) {
+    if (typeof module2 === "object" && typeof module2.exports === "object") {
+      var v = factory(require, exports2);
+      if (v !== undefined)
+        module2.exports = v;
+    } else if (typeof define === "function" && define.amd) {
+      define(["require", "exports", "./impl/format", "./impl/edit", "./impl/scanner", "./impl/parser"], factory);
+    }
+  })(function(require2, exports3) {
+    Object.defineProperty(exports3, "__esModule", { value: true });
+    exports3.applyEdits = exports3.modify = exports3.format = exports3.printParseErrorCode = exports3.ParseErrorCode = exports3.stripComments = exports3.visit = exports3.getNodeValue = exports3.getNodePath = exports3.findNodeAtOffset = exports3.findNodeAtLocation = exports3.parseTree = exports3.parse = exports3.getLocation = exports3.SyntaxKind = exports3.ScanError = exports3.createScanner = undefined;
+    const formatter = require2("./impl/format");
+    const edit = require2("./impl/edit");
+    const scanner = require2("./impl/scanner");
+    const parser = require2("./impl/parser");
+    exports3.createScanner = scanner.createScanner;
+    var ScanError;
+    (function(ScanError2) {
+      ScanError2[ScanError2["None"] = 0] = "None";
+      ScanError2[ScanError2["UnexpectedEndOfComment"] = 1] = "UnexpectedEndOfComment";
+      ScanError2[ScanError2["UnexpectedEndOfString"] = 2] = "UnexpectedEndOfString";
+      ScanError2[ScanError2["UnexpectedEndOfNumber"] = 3] = "UnexpectedEndOfNumber";
+      ScanError2[ScanError2["InvalidUnicode"] = 4] = "InvalidUnicode";
+      ScanError2[ScanError2["InvalidEscapeCharacter"] = 5] = "InvalidEscapeCharacter";
+      ScanError2[ScanError2["InvalidCharacter"] = 6] = "InvalidCharacter";
+    })(ScanError || (exports3.ScanError = ScanError = {}));
+    var SyntaxKind;
+    (function(SyntaxKind2) {
+      SyntaxKind2[SyntaxKind2["OpenBraceToken"] = 1] = "OpenBraceToken";
+      SyntaxKind2[SyntaxKind2["CloseBraceToken"] = 2] = "CloseBraceToken";
+      SyntaxKind2[SyntaxKind2["OpenBracketToken"] = 3] = "OpenBracketToken";
+      SyntaxKind2[SyntaxKind2["CloseBracketToken"] = 4] = "CloseBracketToken";
+      SyntaxKind2[SyntaxKind2["CommaToken"] = 5] = "CommaToken";
+      SyntaxKind2[SyntaxKind2["ColonToken"] = 6] = "ColonToken";
+      SyntaxKind2[SyntaxKind2["NullKeyword"] = 7] = "NullKeyword";
+      SyntaxKind2[SyntaxKind2["TrueKeyword"] = 8] = "TrueKeyword";
+      SyntaxKind2[SyntaxKind2["FalseKeyword"] = 9] = "FalseKeyword";
+      SyntaxKind2[SyntaxKind2["StringLiteral"] = 10] = "StringLiteral";
+      SyntaxKind2[SyntaxKind2["NumericLiteral"] = 11] = "NumericLiteral";
+      SyntaxKind2[SyntaxKind2["LineCommentTrivia"] = 12] = "LineCommentTrivia";
+      SyntaxKind2[SyntaxKind2["BlockCommentTrivia"] = 13] = "BlockCommentTrivia";
+      SyntaxKind2[SyntaxKind2["LineBreakTrivia"] = 14] = "LineBreakTrivia";
+      SyntaxKind2[SyntaxKind2["Trivia"] = 15] = "Trivia";
+      SyntaxKind2[SyntaxKind2["Unknown"] = 16] = "Unknown";
+      SyntaxKind2[SyntaxKind2["EOF"] = 17] = "EOF";
+    })(SyntaxKind || (exports3.SyntaxKind = SyntaxKind = {}));
+    exports3.getLocation = parser.getLocation;
+    exports3.parse = parser.parse;
+    exports3.parseTree = parser.parseTree;
+    exports3.findNodeAtLocation = parser.findNodeAtLocation;
+    exports3.findNodeAtOffset = parser.findNodeAtOffset;
+    exports3.getNodePath = parser.getNodePath;
+    exports3.getNodeValue = parser.getNodeValue;
+    exports3.visit = parser.visit;
+    exports3.stripComments = parser.stripComments;
+    var ParseErrorCode;
+    (function(ParseErrorCode2) {
+      ParseErrorCode2[ParseErrorCode2["InvalidSymbol"] = 1] = "InvalidSymbol";
+      ParseErrorCode2[ParseErrorCode2["InvalidNumberFormat"] = 2] = "InvalidNumberFormat";
+      ParseErrorCode2[ParseErrorCode2["PropertyNameExpected"] = 3] = "PropertyNameExpected";
+      ParseErrorCode2[ParseErrorCode2["ValueExpected"] = 4] = "ValueExpected";
+      ParseErrorCode2[ParseErrorCode2["ColonExpected"] = 5] = "ColonExpected";
+      ParseErrorCode2[ParseErrorCode2["CommaExpected"] = 6] = "CommaExpected";
+      ParseErrorCode2[ParseErrorCode2["CloseBraceExpected"] = 7] = "CloseBraceExpected";
+      ParseErrorCode2[ParseErrorCode2["CloseBracketExpected"] = 8] = "CloseBracketExpected";
+      ParseErrorCode2[ParseErrorCode2["EndOfFileExpected"] = 9] = "EndOfFileExpected";
+      ParseErrorCode2[ParseErrorCode2["InvalidCommentToken"] = 10] = "InvalidCommentToken";
+      ParseErrorCode2[ParseErrorCode2["UnexpectedEndOfComment"] = 11] = "UnexpectedEndOfComment";
+      ParseErrorCode2[ParseErrorCode2["UnexpectedEndOfString"] = 12] = "UnexpectedEndOfString";
+      ParseErrorCode2[ParseErrorCode2["UnexpectedEndOfNumber"] = 13] = "UnexpectedEndOfNumber";
+      ParseErrorCode2[ParseErrorCode2["InvalidUnicode"] = 14] = "InvalidUnicode";
+      ParseErrorCode2[ParseErrorCode2["InvalidEscapeCharacter"] = 15] = "InvalidEscapeCharacter";
+      ParseErrorCode2[ParseErrorCode2["InvalidCharacter"] = 16] = "InvalidCharacter";
+    })(ParseErrorCode || (exports3.ParseErrorCode = ParseErrorCode = {}));
+    function printParseErrorCode(code) {
+      switch (code) {
+        case 1:
+          return "InvalidSymbol";
+        case 2:
+          return "InvalidNumberFormat";
+        case 3:
+          return "PropertyNameExpected";
+        case 4:
+          return "ValueExpected";
+        case 5:
+          return "ColonExpected";
+        case 6:
+          return "CommaExpected";
+        case 7:
+          return "CloseBraceExpected";
+        case 8:
+          return "CloseBracketExpected";
+        case 9:
+          return "EndOfFileExpected";
+        case 10:
+          return "InvalidCommentToken";
+        case 11:
+          return "UnexpectedEndOfComment";
+        case 12:
+          return "UnexpectedEndOfString";
+        case 13:
+          return "UnexpectedEndOfNumber";
+        case 14:
+          return "InvalidUnicode";
+        case 15:
+          return "InvalidEscapeCharacter";
+        case 16:
+          return "InvalidCharacter";
+      }
+      return "<unknown ParseErrorCode>";
+    }
+    exports3.printParseErrorCode = printParseErrorCode;
+    function format(documentText, range, options) {
+      return formatter.format(documentText, range, options);
+    }
+    exports3.format = format;
+    function modify(text, path, value, options) {
+      return edit.setProperty(text, path, value, options);
+    }
+    exports3.modify = modify;
+    function applyEdits(text, edits) {
+      let sortedEdits = edits.slice(0).sort((a, b) => {
+        const diff = a.offset - b.offset;
+        if (diff === 0) {
+          return a.length - b.length;
+        }
+        return diff;
+      });
+      let lastModifiedOffset = text.length;
+      for (let i = sortedEdits.length - 1;i >= 0; i--) {
+        let e = sortedEdits[i];
+        if (e.offset + e.length <= lastModifiedOffset) {
+          text = edit.applyEdit(text, e);
+        } else {
+          throw new Error("Overlapping edit");
+        }
+        lastModifiedOffset = e.offset;
+      }
+      return text;
+    }
+    exports3.applyEdits = applyEdits;
+  });
+});
+
 // src/main.ts
 var core9 = __toESM(require_core(), 1);
 
@@ -22725,47 +22871,9 @@ var core2 = __toESM(require_core(), 1);
 
 // src/config.ts
 var import_node_fs = require("node:fs");
+var import_jsonc_parser = __toESM(require_main2(), 1);
 function parseJsonc(text) {
-  let out = "";
-  let inStr = false;
-  let esc = false;
-  for (let i = 0;i < text.length; i++) {
-    const c = text[i];
-    const c2 = text[i + 1];
-    if (inStr) {
-      out += c;
-      if (esc)
-        esc = false;
-      else if (c === "\\")
-        esc = true;
-      else if (c === '"')
-        inStr = false;
-      continue;
-    }
-    if (c === '"') {
-      inStr = true;
-      out += c;
-      continue;
-    }
-    if (c === "/" && c2 === "/") {
-      while (i < text.length && text[i] !== `
-`)
-        i++;
-      out += `
-`;
-      continue;
-    }
-    if (c === "/" && c2 === "*") {
-      i += 2;
-      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/"))
-        i++;
-      i += 1;
-      continue;
-    }
-    out += c;
-  }
-  out = out.replace(/,(\s*[}\]])/g, "$1");
-  return JSON.parse(out);
+  return import_jsonc_parser.parse(text, [], { allowTrailingComma: true });
 }
 function readConfig(path) {
   return parseJsonc(import_node_fs.readFileSync(path, "utf8"));
