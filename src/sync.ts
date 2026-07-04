@@ -87,46 +87,43 @@ export interface R2Creds {
   secretAccessKey: string
 }
 
-/** Sync a source (dev) R2 bucket into the preview bucket over the S3 API (aws cli). */
 export async function syncR2(fromBucket: string, toBucket: string, creds: R2Creds): Promise<void> {
   core.startGroup(`sync R2 ${fromBucket} -> ${toBucket}`)
   try {
-    // Ensure the AWS CLI is present (self-hosted/arm runners may lack it).
-    const have = await getExecOutput('bash', ['-c', 'command -v aws || true'], {
+    const have = await getExecOutput('bash', ['-c', 'command -v rclone || true'], {
       ignoreReturnCode: true,
       silent: true,
     })
     if (!have.stdout.trim()) {
-      core.info('installing aws cli')
-      const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64'
+      core.info('installing rclone')
       await getExecOutput('bash', [
         '-c',
-        `set -e; curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${arch}.zip" -o /tmp/awscliv2.zip; unzip -q -o /tmp/awscliv2.zip -d /tmp; sudo /tmp/aws/install --update`,
+        'sudo apt-get update -qq && sudo apt-get install -y -qq rclone',
       ])
     }
 
-    const env: Record<string, string> = {}
-    for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v
-    env.AWS_ACCESS_KEY_ID = creds.accessKeyId
-    env.AWS_SECRET_ACCESS_KEY = creds.secretAccessKey
-    env.AWS_DEFAULT_REGION = 'auto'
-    env.AWS_EC2_METADATA_DISABLED = 'true'
+    const conf = join(tmpdir(), 'cf-pr-preview-rclone.conf')
+    writeFileSync(
+      conf,
+      [
+        '[r2]',
+        'type = s3',
+        'provider = Cloudflare',
+        `access_key_id = ${creds.accessKeyId}`,
+        `secret_access_key = ${creds.secretAccessKey}`,
+        `endpoint = ${creds.endpoint}`,
+        'no_check_bucket = true',
+        'region = auto',
+        '',
+      ].join('\n'),
+    )
 
     const code = await getExecOutput(
-      'aws',
-      [
-        's3',
-        'sync',
-        `s3://${fromBucket}`,
-        `s3://${toBucket}`,
-        '--endpoint-url',
-        creds.endpoint,
-        '--delete',
-        '--only-show-errors',
-      ],
-      { env, ignoreReturnCode: true },
+      'rclone',
+      ['sync', `r2:${fromBucket}`, `r2:${toBucket}`, '--config', conf, '--s3-no-check-bucket'],
+      { ignoreReturnCode: true },
     )
-    if (code.exitCode !== 0) throw new Error(`aws s3 sync failed (exit ${code.exitCode})`)
+    if (code.exitCode !== 0) throw new Error(`rclone sync failed (exit ${code.exitCode})`)
     core.info(`synced R2 ${fromBucket} -> ${toBucket}`)
   } finally {
     core.endGroup()
