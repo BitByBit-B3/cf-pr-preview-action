@@ -82,14 +82,17 @@ export async function deploy(inputs: Inputs): Promise<void> {
   if (inputs.syncR2From) {
     const bucket = r2Buckets[0]?.bucket_name
     const vars = rendered.vars ?? {}
-    const endpoint = vars[inputs.r2EndpointVar]
-    const accessKeyId = vars[inputs.r2AccessKeyIdVar]
-    const secretAccessKey = vars[inputs.r2SecretAccessKeyVar]
+    const pick = (name: string) => process.env[name] || vars[name]
+    const endpoint = pick(inputs.r2EndpointVar)
+    const accessKeyId = pick(inputs.r2AccessKeyIdVar)
+    const secretAccessKey = pick(inputs.r2SecretAccessKeyVar)
     if (bucket && endpoint && accessKeyId && secretAccessKey) {
+      core.setSecret(accessKeyId)
+      core.setSecret(secretAccessKey)
       await syncR2(inputs.syncR2From, bucket, { endpoint, accessKeyId, secretAccessKey })
     } else {
       core.warning(
-        'sync-r2-from set but the preview bucket or R2 S3 creds (config vars) are missing; skipping R2 sync',
+        'sync-r2-from set but the preview bucket or R2 S3 creds are missing; skipping R2 sync',
       )
     }
   }
