@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs'
 import * as core from '@actions/core'
 import * as github from '@actions/github'
-import { ensureD1, ensureKv, ensureR2, recreateD1, resolveSubdomain } from './cloudflare'
+import { ensureD1, ensureKv, ensureR2, resolveSubdomain } from './cloudflare'
 import { postDeployComment } from './comment'
 import { getEnvBlock, readConfig, renderPreviewConfig } from './config'
 import { type HookEnv, runHook } from './hook'
@@ -16,11 +16,7 @@ export async function deploy(inputs: Inputs): Promise<void> {
   const subdomain = await resolveSubdomain(inputs.accountId, inputs.apiToken)
   const url = `https://${inputs.workerName}.${subdomain}.workers.dev`
 
-  // When syncing from dev, recreate the preview D1 fresh + empty each run so the
-  // resync is clean; otherwise reuse it idempotently.
-  const dbId = inputs.syncD1From
-    ? await recreateD1(inputs.dbName, inputs.d1Location)
-    : await ensureD1(inputs.dbName, inputs.d1Location)
+  const dbId = await ensureD1(inputs.dbName, inputs.d1Location)
   const d1Binding = envBlock.d1_databases?.[0]?.binding ?? 'DB'
   const migrationsDir =
     envBlock.d1_databases?.[0]?.migrations_dir || inputs.migrationsDir || 'migrations'
@@ -66,6 +62,10 @@ export async function deploy(inputs: Inputs): Promise<void> {
 
   await runHook('pre-deploy-command', inputs.preDeployCommand, inputs.shell, hookEnv)
 
+  if (inputs.syncD1From) {
+    await syncD1(inputs.syncD1From, inputs.dbName, inputs.outConfig)
+  }
+
   if (inputs.runMigrations) {
     core.info(`applying migrations to ${inputs.dbName}`)
     await wrangler([
@@ -77,10 +77,6 @@ export async function deploy(inputs: Inputs): Promise<void> {
       inputs.outConfig,
       '--remote',
     ])
-  }
-
-  if (inputs.syncD1From) {
-    await syncD1(inputs.syncD1From, inputs.dbName, inputs.outConfig)
   }
 
   if (inputs.syncR2From) {

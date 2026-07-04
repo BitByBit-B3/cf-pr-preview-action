@@ -1,9 +1,9 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as core from '@actions/core'
 import { getExecOutput } from '@actions/exec'
-import { runWrangler, wrangler } from './wrangler'
+import { runWrangler, wrangler, wranglerJson } from './wrangler'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -18,15 +18,7 @@ export async function syncD1(
 
     let exported = false
     for (let attempt = 1; attempt <= 8; attempt++) {
-      const res = await runWrangler([
-        'd1',
-        'export',
-        fromDb,
-        '--remote',
-        '--no-schema',
-        '--output',
-        dump,
-      ])
+      const res = await runWrangler(['d1', 'export', fromDb, '--remote', '--output', dump])
       if (res.exitCode === 0) {
         exported = true
         break
@@ -36,12 +28,43 @@ export async function syncD1(
     }
     if (!exported) throw new Error(`failed to export source D1 ${fromDb} after retries`)
 
-    const data = readFileSync(dump, 'utf8')
-      .split('\n')
-      .filter((line) => !/^\s*INSERT INTO\s+["'`]?(d1_migrations|_cf_|sqlite_)/i.test(line))
-      .join('\n')
-    const importSql = join(tmpdir(), 'cf-pr-preview-import.sql')
-    writeFileSync(importSql, `PRAGMA foreign_keys=OFF;\n${data}`)
+    const rows = await wranglerJson<any[]>(
+      [
+        'd1',
+        'execute',
+        previewDb,
+        '--config',
+        previewConfig,
+        '--remote',
+        '--json',
+        '--command',
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%';",
+      ],
+      { allowFail: true },
+    )
+    const tables: string[] = (rows?.[0]?.results ?? []).map((r: any) => r.name).filter(Boolean)
+    if (tables.length) {
+      const dropSql = join(tmpdir(), 'cf-pr-preview-drop.sql')
+      writeFileSync(
+        dropSql,
+        [
+          'PRAGMA foreign_keys=OFF;',
+          ...tables.map((t) => `DROP TABLE IF EXISTS "${t}";`),
+          'PRAGMA foreign_keys=ON;',
+        ].join('\n') + '\n',
+      )
+      await wrangler([
+        'd1',
+        'execute',
+        previewDb,
+        '--config',
+        previewConfig,
+        '--remote',
+        '--file',
+        dropSql,
+      ])
+    }
+
     await wrangler([
       'd1',
       'execute',
@@ -50,9 +73,9 @@ export async function syncD1(
       previewConfig,
       '--remote',
       '--file',
-      importSql,
+      dump,
     ])
-    core.info(`synced data from ${fromDb} into ${previewDb}`)
+    core.info(`cloned ${fromDb} into ${previewDb}`)
   } finally {
     core.endGroup()
   }
