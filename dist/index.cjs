@@ -22716,7 +22716,7 @@ var require_github = __commonJS((exports2) => {
 var core9 = __toESM(require_core(), 1);
 
 // src/deploy.ts
-var import_node_fs3 = require("node:fs");
+var import_node_fs2 = require("node:fs");
 var core6 = __toESM(require_core(), 1);
 var github2 = __toESM(require_github(), 1);
 
@@ -23070,27 +23070,18 @@ async function runHook(name, command, shell, env) {
 }
 
 // src/sync.ts
-var import_node_fs2 = require("node:fs");
 var import_node_os = require("node:os");
 var import_node_path = require("node:path");
 var core5 = __toESM(require_core(), 1);
 var import_exec3 = __toESM(require_exec(), 1);
 var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function syncD1(fromDb, previewDb, previewConfig) {
-  core5.startGroup(`sync D1 data ${fromDb} -> ${previewDb}`);
+  core5.startGroup(`sync D1 ${fromDb} -> ${previewDb}`);
   try {
     const dump = import_node_path.join(import_node_os.tmpdir(), "cf-pr-preview-dev-d1.sql");
     let exported = false;
     for (let attempt = 1;attempt <= 8; attempt++) {
-      const res = await runWrangler([
-        "d1",
-        "export",
-        fromDb,
-        "--remote",
-        "--no-schema",
-        "--output",
-        dump
-      ]);
+      const res = await runWrangler(["d1", "export", fromDb, "--remote", "--output", dump]);
       if (res.exitCode === 0) {
         exported = true;
         break;
@@ -23100,12 +23091,6 @@ async function syncD1(fromDb, previewDb, previewConfig) {
     }
     if (!exported)
       throw new Error(`failed to export source D1 ${fromDb} after retries`);
-    const filtered = import_node_fs2.readFileSync(dump, "utf8").split(`
-`).filter((line) => !/^\s*INSERT INTO\s+["'`]?(d1_migrations|_cf_|sqlite_)/i.test(line)).join(`
-`);
-    const importSql = import_node_path.join(import_node_os.tmpdir(), "cf-pr-preview-import.sql");
-    import_node_fs2.writeFileSync(importSql, `PRAGMA defer_foreign_keys=on;
-${filtered}`);
     await wrangler([
       "d1",
       "execute",
@@ -23114,9 +23099,9 @@ ${filtered}`);
       previewConfig,
       "--remote",
       "--file",
-      importSql
+      dump
     ]);
-    core5.info(`synced data from ${fromDb} into ${previewDb}`);
+    core5.info(`cloned ${fromDb} into ${previewDb}`);
   } finally {
     core5.endGroup();
   }
@@ -23187,7 +23172,7 @@ async function deploy(inputs) {
     url,
     urlVars: inputs.urlVars
   });
-  import_node_fs3.writeFileSync(inputs.outConfig, `${JSON.stringify(rendered, null, 2)}
+  import_node_fs2.writeFileSync(inputs.outConfig, `${JSON.stringify(rendered, null, 2)}
 `);
   core6.info(`wrote ${inputs.outConfig} for ${inputs.workerName}`);
   core6.setOutput("worker", inputs.workerName);
@@ -23204,6 +23189,9 @@ async function deploy(inputs) {
     WRANGLER_COMMAND: inputs.wranglerCommand
   };
   await runHook("pre-deploy-command", inputs.preDeployCommand, inputs.shell, hookEnv);
+  if (inputs.syncD1From) {
+    await syncD1(inputs.syncD1From, inputs.dbName, inputs.outConfig);
+  }
   if (inputs.runMigrations) {
     core6.info(`applying migrations to ${inputs.dbName}`);
     await wrangler([
@@ -23215,9 +23203,6 @@ async function deploy(inputs) {
       inputs.outConfig,
       "--remote"
     ]);
-  }
-  if (inputs.syncD1From) {
-    await syncD1(inputs.syncD1From, inputs.dbName, inputs.outConfig);
   }
   if (inputs.syncR2From) {
     const bucket = r2Buckets[0]?.bucket_name;
