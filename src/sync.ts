@@ -44,8 +44,14 @@ export async function syncD1(
     if (!exported) throw new Error(`failed to export source D1 ${fromDb} after retries`)
 
     // 2. Import the data into the freshly-migrated preview D1 (defer FK checks to commit).
+    //    Drop INSERTs into the migration-tracking + internal tables: migrations
+    //    already populated d1_migrations, so re-inserting collides on the PK.
+    const filtered = readFileSync(dump, 'utf8')
+      .split('\n')
+      .filter((line) => !/^\s*INSERT INTO\s+["'`]?(d1_migrations|_cf_|sqlite_)/i.test(line))
+      .join('\n')
     const importSql = join(tmpdir(), 'cf-pr-preview-import.sql')
-    writeFileSync(importSql, `PRAGMA defer_foreign_keys=on;\n${readFileSync(dump, 'utf8')}`)
+    writeFileSync(importSql, `PRAGMA defer_foreign_keys=on;\n${filtered}`)
     await wrangler([
       'd1',
       'execute',

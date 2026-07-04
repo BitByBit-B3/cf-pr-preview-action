@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-07-04
+
+### Fixed
+
+- `sync-d1-from`: strip `d1_migrations` / internal-table INSERTs from the dev data dump before
+  import — migrations already populate `d1_migrations`, so re-inserting collided on the primary key
+  (`UNIQUE constraint failed: d1_migrations.id`).
+
 ## [1.1.1] - 2026-07-04
 
 ### Changed
@@ -47,7 +55,8 @@ All notable changes to this project are documented here. The format is based on
   plus automatic D1 migrations.
 - Sticky PR comment with the preview URL.
 
-[Unreleased]: https://github.com/BitByBit-B3/cf-pr-preview-action/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/BitByBit-B3/cf-pr-preview-action/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/BitByBit-B3/cf-pr-preview-action/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/BitByBit-B3/cf-pr-preview-action/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/BitByBit-B3/cf-pr-preview-action/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/BitByBit-B3/cf-pr-preview-action/releases/tag/v1.0.0

@@ -23100,9 +23100,12 @@ async function syncD1(fromDb, previewDb, previewConfig) {
     }
     if (!exported)
       throw new Error(`failed to export source D1 ${fromDb} after retries`);
+    const filtered = import_node_fs2.readFileSync(dump, "utf8").split(`
+`).filter((line) => !/^\s*INSERT INTO\s+["'`]?(d1_migrations|_cf_|sqlite_)/i.test(line)).join(`
+`);
     const importSql = import_node_path.join(import_node_os.tmpdir(), "cf-pr-preview-import.sql");
     import_node_fs2.writeFileSync(importSql, `PRAGMA defer_foreign_keys=on;
-${import_node_fs2.readFileSync(dump, "utf8")}`);
+${filtered}`);
     await wrangler([
       "d1",
       "execute",
