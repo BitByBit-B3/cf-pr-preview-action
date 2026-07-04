@@ -66,12 +66,6 @@ export async function deploy(inputs: Inputs): Promise<void> {
 
   await runHook('pre-deploy-command', inputs.preDeployCommand, inputs.shell, hookEnv)
 
-  // Clone dev's D1 into the fresh preview first, then apply this PR's migrations
-  // on top (so any schema changes the PR adds land over the dev snapshot).
-  if (inputs.syncD1From) {
-    await syncD1(inputs.syncD1From, inputs.dbName, inputs.outConfig)
-  }
-
   if (inputs.runMigrations) {
     core.info(`applying migrations to ${inputs.dbName}`)
     await wrangler([
@@ -83,6 +77,10 @@ export async function deploy(inputs: Inputs): Promise<void> {
       inputs.outConfig,
       '--remote',
     ])
+  }
+
+  if (inputs.syncD1From) {
+    await syncD1(inputs.syncD1From, inputs.dbName, inputs.outConfig)
   }
 
   if (inputs.syncR2From) {
