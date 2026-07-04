@@ -2,7 +2,6 @@ import * as core from '@actions/core'
 import { bindingResourceName, type KvBinding, type R2Binding } from './config'
 import { wrangler, wranglerJson } from './wrangler'
 
-/** Resolve the account's workers.dev subdomain for building the preview URL. */
 export async function resolveSubdomain(accountId: string, token: string): Promise<string> {
   const res = await fetch(
     `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`,
@@ -15,7 +14,6 @@ export async function resolveSubdomain(accountId: string, token: string): Promis
   return sub
 }
 
-/** Create the per-PR D1 idempotently (create is not idempotent, so list first). */
 export async function ensureD1(dbName: string, location: string): Promise<string> {
   const list = (await wranglerJson<any[]>(['d1', 'list', '--json'], { allowFail: true })) ?? []
   let found = list.find((d) => d.name === dbName)
@@ -31,7 +29,6 @@ export async function ensureD1(dbName: string, location: string): Promise<string
   return found.uuid
 }
 
-/** Create per-PR KV namespaces mirroring the source bindings. */
 export async function ensureKv(sourceKv: any, workerName: string): Promise<KvBinding[]> {
   if (!Array.isArray(sourceKv)) return []
   const out: KvBinding[] = []
@@ -55,7 +52,6 @@ export async function ensureKv(sourceKv: any, workerName: string): Promise<KvBin
   return out
 }
 
-/** Create per-PR R2 buckets mirroring the source bindings (create is ignore-exists). */
 export async function ensureR2(sourceR2: any, workerName: string): Promise<R2Binding[]> {
   if (!Array.isArray(sourceR2)) return []
   const out: R2Binding[] = []

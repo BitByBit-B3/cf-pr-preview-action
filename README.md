@@ -1,5 +1,9 @@
 # cf-pr-preview-action
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/fcee3e8f-faab-4836-a4c2-23a3ec63adbe" alt="cf-pr-preview-action" width="100%">
+</p>
+
 > Give every pull request its own **isolated, ephemeral Cloudflare preview** — a per-PR Worker wired to a per-PR D1, KV, and R2 — and tear it all down automatically when the PR closes.
 
 <p>

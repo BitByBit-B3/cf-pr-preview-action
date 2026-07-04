@@ -6,8 +6,6 @@ import { type HookEnv, runHook } from './hook'
 import type { Inputs } from './inputs'
 
 export async function teardown(inputs: Inputs): Promise<void> {
-  // The source config may be absent (e.g. teardown after a branch was deleted);
-  // tolerate it and fall back to deleting worker + D1 by name only.
   let envBlock: any = {}
   try {
     envBlock = getEnvBlock(readConfig(inputs.sourceConfig), inputs.configEnv)

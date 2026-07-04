@@ -10,7 +10,6 @@ function baseCmd(): string[] {
   return baseCache
 }
 
-/** Run a wrangler subcommand, returning the raw exec result (exit code + output). */
 export async function runWrangler(
   args: string[],
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
@@ -18,7 +17,6 @@ export async function runWrangler(
   return getExecOutput(cmd, [...pre, ...args], { ignoreReturnCode: true })
 }
 
-/** Run a wrangler subcommand. Returns stdout; throws on non-zero unless allowFail. */
 export async function wrangler(
   args: string[],
   opts: { allowFail?: boolean } = {},
@@ -34,7 +32,6 @@ export async function wrangler(
   return res.stdout
 }
 
-/** Run a wrangler subcommand expecting JSON stdout. */
 export async function wranglerJson<T = any>(
   args: string[],
   opts: { allowFail?: boolean } = {},
@@ -49,7 +46,6 @@ export async function wranglerJson<T = any>(
   }
   const direct = tryParse(out)
   if (direct !== null) return direct
-  // Some wrangler versions prepend banner text; salvage the JSON body.
   const start = out.search(/[[{]/)
   if (start >= 0) {
     const salvaged = tryParse(out.slice(start))

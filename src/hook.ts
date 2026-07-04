@@ -10,11 +10,6 @@ export interface HookEnv {
   WRANGLER_COMMAND: string
 }
 
-/**
- * Run a user-supplied command hook with the preview environment injected as
- * env vars, so consumers can run migrations, seed data, smoke tests, or
- * anything else against their isolated per-PR resources.
- */
 export async function runHook(
   name: string,
   command: string,

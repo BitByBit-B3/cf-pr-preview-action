@@ -1,10 +1,5 @@
 import { readFileSync } from 'node:fs'
 
-/**
- * Minimal JSONC parser: strips `//` and block comments plus trailing commas,
- * respecting JSON double-quoted strings, then JSON.parse. wrangler.jsonc is
- * JSONC, so plain JSON.parse would throw on comments.
- */
 export function parseJsonc(text: string): any {
   let out = ''
   let inStr = false
@@ -45,22 +40,11 @@ export function readConfig(path: string): any {
   return parseJsonc(readFileSync(path, 'utf8'))
 }
 
-/**
- * Return the named env block (e.g. env.main). Falls back to the top-level
- * config when envKey is empty or the block is absent, so single-env configs
- * still work.
- */
 export function getEnvBlock(cfg: any, envKey: string): any {
   if (envKey && cfg.env?.[envKey]) return cfg.env[envKey]
   return cfg
 }
 
-/**
- * Cloudflare-safe R2 bucket / KV title derived from the preview worker name
- * plus a binding. Lowercased, non-alnum collapsed to '-', trimmed to 63 chars
- * while preserving a stable hash tail so deploy and teardown compute the
- * identical, unique name.
- */
 export function bindingResourceName(workerName: string, binding: string): string {
   const raw = `${workerName}-${binding}`
     .toLowerCase()
@@ -99,11 +83,6 @@ export interface RenderInput {
   urlVars: string[]
 }
 
-/**
- * Build the ephemeral wrangler.preview.jsonc object: the source worker config
- * rebound to the per-PR worker name and isolated D1/KV/R2 resources, deployed
- * on a workers.dev subdomain. Custom domains / routes are intentionally dropped.
- */
 export function renderPreviewConfig(i: RenderInput): any {
   const originalName = i.envBlock.name ?? i.cfg.name
   const services = Array.isArray(i.envBlock.services)
@@ -112,10 +91,6 @@ export function renderPreviewConfig(i: RenderInput): any {
       )
     : undefined
 
-  // Merge global (top-level) vars first, then let the named env block override
-  // them. Wrangler does not inherit top-level vars into named envs, so a preview
-  // rendered from env.<config-env> would otherwise lose any global vars — merge
-  // them back in so the preview worker sees the same vars a normal deploy would.
   const vars = {
     ...(i.cfg.vars ?? {}),
     ...(i.envBlock.vars ?? {}),
