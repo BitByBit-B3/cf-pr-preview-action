@@ -1,6 +1,6 @@
 import * as core from '@actions/core'
-import { readInputs } from './inputs'
 import { deploy } from './deploy'
+import { readInputs } from './inputs'
 import { teardown } from './teardown'
 
 async function run(): Promise<void> {
@@ -12,7 +12,9 @@ async function run(): Promise<void> {
     process.env.CLOUDFLARE_API_TOKEN = inputs.apiToken
     core.setSecret(inputs.apiToken)
 
-    core.info(`cf-pr-preview-action: mode=${inputs.mode} worker=${inputs.workerName} db=${inputs.dbName}`)
+    core.info(
+      `cf-pr-preview-action: mode=${inputs.mode} worker=${inputs.workerName} db=${inputs.dbName}`,
+    )
     if (inputs.mode === 'teardown') await teardown(inputs)
     else await deploy(inputs)
   } catch (err: any) {

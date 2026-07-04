@@ -1,17 +1,12 @@
 import { writeFileSync } from 'node:fs'
 import * as core from '@actions/core'
 import * as github from '@actions/github'
-import type { Inputs } from './inputs'
-import { readConfig, getEnvBlock, renderPreviewConfig } from './config'
-import {
-  resolveSubdomain,
-  ensureD1,
-  ensureKv,
-  ensureR2,
-} from './cloudflare'
-import { wrangler } from './wrangler'
-import { runHook, type HookEnv } from './hook'
+import { ensureD1, ensureKv, ensureR2, resolveSubdomain } from './cloudflare'
 import { postDeployComment } from './comment'
+import { getEnvBlock, readConfig, renderPreviewConfig } from './config'
+import { type HookEnv, runHook } from './hook'
+import type { Inputs } from './inputs'
+import { wrangler } from './wrangler'
 
 export async function deploy(inputs: Inputs): Promise<void> {
   const cfg = readConfig(inputs.sourceConfig)
@@ -68,7 +63,15 @@ export async function deploy(inputs: Inputs): Promise<void> {
 
   if (inputs.runMigrations) {
     core.info(`applying migrations to ${inputs.dbName}`)
-    await wrangler(['d1', 'migrations', 'apply', inputs.dbName, '--config', inputs.outConfig, '--remote'])
+    await wrangler([
+      'd1',
+      'migrations',
+      'apply',
+      inputs.dbName,
+      '--config',
+      inputs.outConfig,
+      '--remote',
+    ])
   }
 
   core.info(`deploying preview worker ${inputs.workerName}`)
@@ -77,7 +80,10 @@ export async function deploy(inputs: Inputs): Promise<void> {
   await runHook('post-deploy-command', inputs.postDeployCommand, inputs.shell, hookEnv)
 
   if (inputs.comment) {
-    const sha = (github.context.payload.pull_request?.head?.sha ?? github.context.sha ?? '').slice(0, 7)
+    const sha = (github.context.payload.pull_request?.head?.sha ?? github.context.sha ?? '').slice(
+      0,
+      7,
+    )
     await postDeployComment(inputs.githubToken, {
       url,
       worker: inputs.workerName,

@@ -1,0 +1,23 @@
+# git hooks managed by lefthook — run `bun install` (triggers `prepare`) to install.
+pre-commit:
+  parallel: true
+  commands:
+    biome:
+      glob: '*.{ts,js,json,md}'
+      run: bunx biome check --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+
+pre-push:
+  commands:
+    typecheck:
+      run: bun run typecheck
+    test:
+      run: bun test
+    dist:
+      # dist/index.cjs is committed and CI enforces it — keep it fresh before pushing.
+      run: |
+        bun run build
+        git diff --quiet -- dist/index.cjs || {
+          echo 'dist/index.cjs is stale — run `bun run build` and commit it.'
+          exit 1
+        }

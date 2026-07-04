@@ -1,5 +1,5 @@
-import { getExecOutput } from '@actions/exec'
 import * as core from '@actions/core'
+import { getExecOutput } from '@actions/exec'
 
 let baseCache: string[] | null = null
 

@@ -1,5 +1,5 @@
-import { exec } from '@actions/exec'
 import * as core from '@actions/core'
+import { exec } from '@actions/exec'
 
 export interface HookEnv {
   PREVIEW_WORKER: string
@@ -15,7 +15,12 @@ export interface HookEnv {
  * env vars, so consumers can run migrations, seed data, smoke tests, or
  * anything else against their isolated per-PR resources.
  */
-export async function runHook(name: string, command: string, shell: string, env: HookEnv): Promise<void> {
+export async function runHook(
+  name: string,
+  command: string,
+  shell: string,
+  env: HookEnv,
+): Promise<void> {
   if (!command.trim()) return
   core.startGroup(`hook: ${name}`)
   try {

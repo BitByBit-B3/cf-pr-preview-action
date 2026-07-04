@@ -51,7 +51,7 @@ export function readConfig(path: string): any {
  * still work.
  */
 export function getEnvBlock(cfg: any, envKey: string): any {
-  if (envKey && cfg.env && cfg.env[envKey]) return cfg.env[envKey]
+  if (envKey && cfg.env?.[envKey]) return cfg.env[envKey]
   return cfg
 }
 
@@ -112,7 +112,12 @@ export function renderPreviewConfig(i: RenderInput): any {
       )
     : undefined
 
+  // Merge global (top-level) vars first, then let the named env block override
+  // them. Wrangler does not inherit top-level vars into named envs, so a preview
+  // rendered from env.<config-env> would otherwise lose any global vars — merge
+  // them back in so the preview worker sees the same vars a normal deploy would.
   const vars = {
+    ...(i.cfg.vars ?? {}),
     ...(i.envBlock.vars ?? {}),
     TARGET_ENV: i.configEnv,
     CF_WORKER_NAME: i.workerName,

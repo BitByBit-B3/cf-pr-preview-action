@@ -1,6 +1,6 @@
 import * as core from '@actions/core'
-import { wrangler, wranglerJson } from './wrangler'
 import { bindingResourceName, type KvBinding, type R2Binding } from './config'
+import { wrangler, wranglerJson } from './wrangler'
 
 /** Resolve the account's workers.dev subdomain for building the preview URL. */
 export async function resolveSubdomain(accountId: string, token: string): Promise<string> {

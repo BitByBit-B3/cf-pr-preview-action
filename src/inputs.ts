@@ -53,8 +53,10 @@ export function readInputs(): Inputs {
 
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || core.getInput('cloudflare-account-id')
   const apiToken = process.env.CLOUDFLARE_API_TOKEN || core.getInput('cloudflare-api-token')
-  if (!accountId) throw new Error('CLOUDFLARE_ACCOUNT_ID (env or cloudflare-account-id input) is required')
-  if (!apiToken) throw new Error('CLOUDFLARE_API_TOKEN (env or cloudflare-api-token input) is required')
+  if (!accountId)
+    throw new Error('CLOUDFLARE_ACCOUNT_ID (env or cloudflare-account-id input) is required')
+  if (!apiToken)
+    throw new Error('CLOUDFLARE_API_TOKEN (env or cloudflare-api-token input) is required')
 
   return {
     mode,

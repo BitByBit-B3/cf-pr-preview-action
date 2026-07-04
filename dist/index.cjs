@@ -22715,65 +22715,13 @@ var require_github = __commonJS((exports2) => {
 // src/main.ts
 var core8 = __toESM(require_core(), 1);
 
-// src/inputs.ts
-var core = __toESM(require_core(), 1);
-var github = __toESM(require_github(), 1);
-function bool(name, def) {
-  const raw = core.getInput(name);
-  if (raw === "")
-    return def;
-  return raw.toLowerCase() === "true";
-}
-function readInputs() {
-  const workerPrefix = core.getInput("worker-prefix", { required: true });
-  const dbPrefix = core.getInput("db-prefix") || workerPrefix;
-  const prNumber = github.context.payload.pull_request?.number;
-  if (!prNumber) {
-    throw new Error("this action must run on a pull_request event (no PR number in context)");
-  }
-  const explicit = (core.getInput("mode") || "auto").toLowerCase();
-  let mode;
-  if (explicit === "deploy" || explicit === "teardown") {
-    mode = explicit;
-  } else {
-    mode = github.context.payload.action === "closed" ? "teardown" : "deploy";
-  }
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || core.getInput("cloudflare-account-id");
-  const apiToken = process.env.CLOUDFLARE_API_TOKEN || core.getInput("cloudflare-api-token");
-  if (!accountId)
-    throw new Error("CLOUDFLARE_ACCOUNT_ID (env or cloudflare-account-id input) is required");
-  if (!apiToken)
-    throw new Error("CLOUDFLARE_API_TOKEN (env or cloudflare-api-token input) is required");
-  return {
-    mode,
-    prNumber,
-    workerName: `${workerPrefix}-pr-${prNumber}`,
-    dbName: `${dbPrefix}-pr-${prNumber}`,
-    sourceConfig: core.getInput("source-config") || "wrangler.jsonc",
-    outConfig: core.getInput("out-config") || "wrangler.preview.jsonc",
-    configEnv: core.getInput("config-env") || "main",
-    d1Location: core.getInput("d1-location") || "apac",
-    migrationsDir: core.getInput("migrations-dir"),
-    runMigrations: bool("run-migrations", true),
-    isolateKv: bool("isolate-kv", true),
-    isolateR2: bool("isolate-r2", true),
-    urlVars: (core.getInput("preview-url-vars") || "BETTER_AUTH_URL").split(",").map((s) => s.trim()).filter(Boolean),
-    wranglerCommand: core.getInput("wrangler-command") || "bunx wrangler",
-    comment: bool("comment", true),
-    githubToken: core.getInput("github-token"),
-    accountId,
-    apiToken,
-    preDeployCommand: core.getInput("pre-deploy-command"),
-    postDeployCommand: core.getInput("post-deploy-command"),
-    preTeardownCommand: core.getInput("pre-teardown-command"),
-    shell: core.getInput("shell") || "bash"
-  };
-}
-
 // src/deploy.ts
 var import_node_fs2 = require("node:fs");
-var core6 = __toESM(require_core(), 1);
-var github3 = __toESM(require_github(), 1);
+var core5 = __toESM(require_core(), 1);
+var github2 = __toESM(require_github(), 1);
+
+// src/cloudflare.ts
+var core2 = __toESM(require_core(), 1);
 
 // src/config.ts
 var import_node_fs = require("node:fs");
@@ -22823,7 +22771,7 @@ function readConfig(path) {
   return parseJsonc(import_node_fs.readFileSync(path, "utf8"));
 }
 function getEnvBlock(cfg, envKey) {
-  if (envKey && cfg.env && cfg.env[envKey])
+  if (envKey && cfg.env?.[envKey])
     return cfg.env[envKey];
   return cfg;
 }
@@ -22841,6 +22789,7 @@ function renderPreviewConfig(i) {
   const originalName = i.envBlock.name ?? i.cfg.name;
   const services = Array.isArray(i.envBlock.services) ? i.envBlock.services.map((s) => s.service === originalName ? { ...s, service: i.workerName } : s) : undefined;
   const vars = {
+    ...i.cfg.vars ?? {},
     ...i.envBlock.vars ?? {},
     TARGET_ENV: i.configEnv,
     CF_WORKER_NAME: i.workerName
@@ -22880,12 +22829,9 @@ function renderPreviewConfig(i) {
   return out;
 }
 
-// src/cloudflare.ts
-var core3 = __toESM(require_core(), 1);
-
 // src/wrangler.ts
+var core = __toESM(require_core(), 1);
 var import_exec = __toESM(require_exec(), 1);
-var core2 = __toESM(require_core(), 1);
 var baseCache = null;
 function baseCmd() {
   if (!baseCache) {
@@ -22898,7 +22844,7 @@ async function wrangler(args, opts = {}) {
   const res = await import_exec.getExecOutput(cmd, [...pre, ...args], { ignoreReturnCode: true });
   if (res.exitCode !== 0) {
     if (opts.allowFail) {
-      core2.info(`wrangler ${args.join(" ")} exited ${res.exitCode} (ignored)`);
+      core.info(`wrangler ${args.join(" ")} exited ${res.exitCode} (ignored)`);
       return res.stdout;
     }
     throw new Error(`wrangler ${args.join(" ")} failed (exit ${res.exitCode})`);
@@ -22943,12 +22889,12 @@ async function ensureD1(dbName, location) {
   const list = await wranglerJson(["d1", "list", "--json"], { allowFail: true }) ?? [];
   let found = list.find((d) => d.name === dbName);
   if (!found) {
-    core3.info(`creating preview D1 ${dbName}`);
+    core2.info(`creating preview D1 ${dbName}`);
     await wrangler(["d1", "create", dbName, "--location", location]);
     const relist = await wranglerJson(["d1", "list", "--json"], { allowFail: true }) ?? [];
     found = relist.find((d) => d.name === dbName);
   } else {
-    core3.info(`reusing preview D1 ${dbName} (${found.uuid})`);
+    core2.info(`reusing preview D1 ${dbName} (${found.uuid})`);
   }
   if (!found)
     throw new Error(`failed to resolve preview D1 id for ${dbName}`);
@@ -22963,12 +22909,12 @@ async function ensureKv(sourceKv, workerName) {
     const title = bindingResourceName(workerName, ns.binding);
     let hit = existing.find((e) => e.title === title);
     if (!hit) {
-      core3.info(`creating preview KV namespace ${title}`);
+      core2.info(`creating preview KV namespace ${title}`);
       await wrangler(["kv", "namespace", "create", title]);
       const relist = await wranglerJson(["kv", "namespace", "list"], { allowFail: true }) ?? [];
       hit = relist.find((e) => e.title === title);
     } else {
-      core3.info(`reusing preview KV namespace ${title} (${hit.id})`);
+      core2.info(`reusing preview KV namespace ${title} (${hit.id})`);
     }
     if (!hit)
       throw new Error(`failed to resolve preview KV id for ${title}`);
@@ -22982,23 +22928,23 @@ async function ensureR2(sourceR2, workerName) {
   const out = [];
   for (const b of sourceR2) {
     const bucket = bindingResourceName(workerName, b.binding);
-    core3.info(`ensuring preview R2 bucket ${bucket}`);
+    core2.info(`ensuring preview R2 bucket ${bucket}`);
     await wrangler(["r2", "bucket", "create", bucket], { allowFail: true });
     out.push({ binding: b.binding, bucket_name: bucket, remote: true });
   }
   return out;
 }
 async function deleteWorker(name) {
-  core3.info(`deleting preview worker ${name}`);
+  core2.info(`deleting preview worker ${name}`);
   await wrangler(["delete", "--name", name, "--force"], { allowFail: true });
 }
 async function deleteD1(dbName) {
   const dbs = await wranglerJson(["d1", "list", "--json"], { allowFail: true }) ?? [];
   if (dbs.find((d) => d.name === dbName)) {
-    core3.info(`deleting preview D1 ${dbName}`);
+    core2.info(`deleting preview D1 ${dbName}`);
     await wrangler(["d1", "delete", dbName, "-y"], { allowFail: true });
   } else {
-    core3.info(`preview D1 ${dbName} absent or already deleted`);
+    core2.info(`preview D1 ${dbName} absent or already deleted`);
   }
 }
 async function deleteKv(sourceKv, workerName) {
@@ -23009,10 +22955,10 @@ async function deleteKv(sourceKv, workerName) {
     const title = bindingResourceName(workerName, ns.binding);
     const hit = existing.find((e) => e.title === title);
     if (hit) {
-      core3.info(`deleting preview KV namespace ${title} (${hit.id})`);
+      core2.info(`deleting preview KV namespace ${title} (${hit.id})`);
       await wrangler(["kv", "namespace", "delete", "--namespace-id", hit.id], { allowFail: true });
     } else {
-      core3.info(`preview KV namespace ${title} absent or already deleted`);
+      core2.info(`preview KV namespace ${title} absent or already deleted`);
     }
   }
 }
@@ -23021,47 +22967,23 @@ async function deleteR2(sourceR2, workerName) {
     return;
   for (const b of sourceR2) {
     const bucket = bindingResourceName(workerName, b.binding);
-    core3.info(`deleting preview R2 bucket ${bucket}`);
+    core2.info(`deleting preview R2 bucket ${bucket}`);
     await wrangler(["r2", "bucket", "delete", bucket], { allowFail: true });
   }
 }
 
-// src/hook.ts
-var import_exec2 = __toESM(require_exec(), 1);
-var core4 = __toESM(require_core(), 1);
-async function runHook(name, command, shell, env) {
-  if (!command.trim())
-    return;
-  core4.startGroup(`hook: ${name}`);
-  try {
-    const merged = {};
-    for (const [k, v] of Object.entries(process.env))
-      if (v !== undefined)
-        merged[k] = v;
-    for (const [k, v] of Object.entries(env))
-      if (v !== undefined)
-        merged[k] = v;
-    const args = shell === "bash" ? ["-e", "-o", "pipefail", "-c", command] : ["-c", command];
-    const code = await import_exec2.exec(shell, args, { env: merged, ignoreReturnCode: true });
-    if (code !== 0)
-      throw new Error(`${name} exited ${code}`);
-  } finally {
-    core4.endGroup();
-  }
-}
-
 // src/comment.ts
-var github2 = __toESM(require_github(), 1);
-var core5 = __toESM(require_core(), 1);
+var core3 = __toESM(require_core(), 1);
+var github = __toESM(require_github(), 1);
 var MARKER = "<!-- cf-pr-preview-action -->";
 async function upsert(token, body) {
   if (!token) {
-    core5.info("no github-token; skipping preview comment");
+    core3.info("no github-token; skipping preview comment");
     return;
   }
-  const octo = github2.getOctokit(token);
-  const { owner, repo } = github2.context.repo;
-  const issue_number = github2.context.payload.pull_request?.number;
+  const octo = github.getOctokit(token);
+  const { owner, repo } = github.context.repo;
+  const issue_number = github.context.payload.pull_request?.number;
   if (!issue_number)
     return;
   const comments = await octo.paginate(octo.rest.issues.listComments, {
@@ -23110,6 +23032,30 @@ async function postTeardownComment(token, o) {
   await upsert(token, body);
 }
 
+// src/hook.ts
+var core4 = __toESM(require_core(), 1);
+var import_exec2 = __toESM(require_exec(), 1);
+async function runHook(name, command, shell, env) {
+  if (!command.trim())
+    return;
+  core4.startGroup(`hook: ${name}`);
+  try {
+    const merged = {};
+    for (const [k, v] of Object.entries(process.env))
+      if (v !== undefined)
+        merged[k] = v;
+    for (const [k, v] of Object.entries(env))
+      if (v !== undefined)
+        merged[k] = v;
+    const args = shell === "bash" ? ["-e", "-o", "pipefail", "-c", command] : ["-c", command];
+    const code = await import_exec2.exec(shell, args, { env: merged, ignoreReturnCode: true });
+    if (code !== 0)
+      throw new Error(`${name} exited ${code}`);
+  } finally {
+    core4.endGroup();
+  }
+}
+
 // src/deploy.ts
 async function deploy(inputs) {
   const cfg = readConfig(inputs.sourceConfig);
@@ -23137,12 +23083,12 @@ async function deploy(inputs) {
   });
   import_node_fs2.writeFileSync(inputs.outConfig, `${JSON.stringify(rendered, null, 2)}
 `);
-  core6.info(`wrote ${inputs.outConfig} for ${inputs.workerName}`);
-  core6.setOutput("worker", inputs.workerName);
-  core6.setOutput("db", inputs.dbName);
-  core6.setOutput("db-id", dbId);
-  core6.setOutput("url", url);
-  core6.setOutput("config", inputs.outConfig);
+  core5.info(`wrote ${inputs.outConfig} for ${inputs.workerName}`);
+  core5.setOutput("worker", inputs.workerName);
+  core5.setOutput("db", inputs.dbName);
+  core5.setOutput("db-id", dbId);
+  core5.setOutput("url", url);
+  core5.setOutput("config", inputs.outConfig);
   const hookEnv = {
     PREVIEW_WORKER: inputs.workerName,
     PREVIEW_DB: inputs.dbName,
@@ -23153,14 +23099,22 @@ async function deploy(inputs) {
   };
   await runHook("pre-deploy-command", inputs.preDeployCommand, inputs.shell, hookEnv);
   if (inputs.runMigrations) {
-    core6.info(`applying migrations to ${inputs.dbName}`);
-    await wrangler(["d1", "migrations", "apply", inputs.dbName, "--config", inputs.outConfig, "--remote"]);
+    core5.info(`applying migrations to ${inputs.dbName}`);
+    await wrangler([
+      "d1",
+      "migrations",
+      "apply",
+      inputs.dbName,
+      "--config",
+      inputs.outConfig,
+      "--remote"
+    ]);
   }
-  core6.info(`deploying preview worker ${inputs.workerName}`);
+  core5.info(`deploying preview worker ${inputs.workerName}`);
   await wrangler(["deploy", "--config", inputs.outConfig]);
   await runHook("post-deploy-command", inputs.postDeployCommand, inputs.shell, hookEnv);
   if (inputs.comment) {
-    const sha = (github3.context.payload.pull_request?.head?.sha ?? github3.context.sha ?? "").slice(0, 7);
+    const sha = (github2.context.payload.pull_request?.head?.sha ?? github2.context.sha ?? "").slice(0, 7);
     await postDeployComment(inputs.githubToken, {
       url,
       worker: inputs.workerName,
@@ -23168,7 +23122,62 @@ async function deploy(inputs) {
       sha
     });
   }
-  core6.info(`preview ready: ${url}`);
+  core5.info(`preview ready: ${url}`);
+}
+
+// src/inputs.ts
+var core6 = __toESM(require_core(), 1);
+var github3 = __toESM(require_github(), 1);
+function bool(name, def) {
+  const raw = core6.getInput(name);
+  if (raw === "")
+    return def;
+  return raw.toLowerCase() === "true";
+}
+function readInputs() {
+  const workerPrefix = core6.getInput("worker-prefix", { required: true });
+  const dbPrefix = core6.getInput("db-prefix") || workerPrefix;
+  const prNumber = github3.context.payload.pull_request?.number;
+  if (!prNumber) {
+    throw new Error("this action must run on a pull_request event (no PR number in context)");
+  }
+  const explicit = (core6.getInput("mode") || "auto").toLowerCase();
+  let mode;
+  if (explicit === "deploy" || explicit === "teardown") {
+    mode = explicit;
+  } else {
+    mode = github3.context.payload.action === "closed" ? "teardown" : "deploy";
+  }
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || core6.getInput("cloudflare-account-id");
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN || core6.getInput("cloudflare-api-token");
+  if (!accountId)
+    throw new Error("CLOUDFLARE_ACCOUNT_ID (env or cloudflare-account-id input) is required");
+  if (!apiToken)
+    throw new Error("CLOUDFLARE_API_TOKEN (env or cloudflare-api-token input) is required");
+  return {
+    mode,
+    prNumber,
+    workerName: `${workerPrefix}-pr-${prNumber}`,
+    dbName: `${dbPrefix}-pr-${prNumber}`,
+    sourceConfig: core6.getInput("source-config") || "wrangler.jsonc",
+    outConfig: core6.getInput("out-config") || "wrangler.preview.jsonc",
+    configEnv: core6.getInput("config-env") || "main",
+    d1Location: core6.getInput("d1-location") || "apac",
+    migrationsDir: core6.getInput("migrations-dir"),
+    runMigrations: bool("run-migrations", true),
+    isolateKv: bool("isolate-kv", true),
+    isolateR2: bool("isolate-r2", true),
+    urlVars: (core6.getInput("preview-url-vars") || "BETTER_AUTH_URL").split(",").map((s) => s.trim()).filter(Boolean),
+    wranglerCommand: core6.getInput("wrangler-command") || "bunx wrangler",
+    comment: bool("comment", true),
+    githubToken: core6.getInput("github-token"),
+    accountId,
+    apiToken,
+    preDeployCommand: core6.getInput("pre-deploy-command"),
+    postDeployCommand: core6.getInput("post-deploy-command"),
+    preTeardownCommand: core6.getInput("pre-teardown-command"),
+    shell: core6.getInput("shell") || "bash"
+  };
 }
 
 // src/teardown.ts

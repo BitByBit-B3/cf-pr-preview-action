@@ -1,9 +1,9 @@
 import * as core from '@actions/core'
-import type { Inputs } from './inputs'
-import { readConfig, getEnvBlock } from './config'
-import { deleteWorker, deleteD1, deleteKv, deleteR2 } from './cloudflare'
-import { runHook, type HookEnv } from './hook'
+import { deleteD1, deleteKv, deleteR2, deleteWorker } from './cloudflare'
 import { postTeardownComment } from './comment'
+import { getEnvBlock, readConfig } from './config'
+import { type HookEnv, runHook } from './hook'
+import type { Inputs } from './inputs'
 
 export async function teardown(inputs: Inputs): Promise<void> {
   // The source config may be absent (e.g. teardown after a branch was deleted);

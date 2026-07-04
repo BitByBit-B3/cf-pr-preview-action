@@ -1,5 +1,5 @@
-import { expect, test, describe } from 'bun:test'
-import { parseJsonc, getEnvBlock, bindingResourceName, renderPreviewConfig } from '../src/config'
+import { describe, expect, test } from 'bun:test'
+import { bindingResourceName, getEnvBlock, parseJsonc, renderPreviewConfig } from '../src/config'
 
 describe('parseJsonc', () => {
   test('strips line and block comments and trailing commas', () => {
@@ -86,5 +86,37 @@ describe('renderPreviewConfig', () => {
     expect(out.vars.CF_WORKER_NAME).toBe('app-preview-pr-7')
     expect(out.vars.TARGET_ENV).toBe('main')
     expect(out.vars.NODE_ENV).toBe('production')
+  })
+
+  test('merges global top-level vars, env block overrides them', () => {
+    const cfgWithGlobal = {
+      $schema: 's',
+      name: 'app',
+      main: 'src/index.ts',
+      vars: { GLOBAL_ONLY: 'g', SHARED: 'from-global' },
+      env: {
+        main: {
+          name: 'app-main',
+          vars: { SHARED: 'from-env', ENV_ONLY: 'e' },
+        },
+      },
+    }
+    const r = renderPreviewConfig({
+      cfg: cfgWithGlobal,
+      envBlock: cfgWithGlobal.env.main,
+      workerName: 'app-preview-pr-9',
+      dbName: 'app-db-pr-9',
+      dbId: 'uuid-9',
+      d1Binding: 'DB',
+      migrationsDir: 'migrations',
+      kvNamespaces: [],
+      r2Buckets: [],
+      configEnv: 'main',
+      url: 'https://app-preview-pr-9.acc.workers.dev',
+      urlVars: [],
+    })
+    expect(r.vars.GLOBAL_ONLY).toBe('g') // global var carried into preview
+    expect(r.vars.ENV_ONLY).toBe('e') // env var preserved
+    expect(r.vars.SHARED).toBe('from-env') // env overrides global
   })
 })
