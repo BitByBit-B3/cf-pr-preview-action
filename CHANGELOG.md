@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-04
+
+### Changed
+
+- `sync-d1-from` now recreates the preview D1 fresh each run, lets migrations build the schema, then
+  imports dev's **data** (`--no-schema`). Removes the fragile drop-tables reset (which hit
+  `SQLITE_AUTH` on internal tables and dependency errors on triggers/views). Migrations run again.
+
 ## [1.1.0] - 2026-07-04
 
 ### Added
@@ -39,6 +47,7 @@ All notable changes to this project are documented here. The format is based on
   plus automatic D1 migrations.
 - Sticky PR comment with the preview URL.
 
-[Unreleased]: https://github.com/BitByBit-B3/cf-pr-preview-action/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/BitByBit-B3/cf-pr-preview-action/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/BitByBit-B3/cf-pr-preview-action/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/BitByBit-B3/cf-pr-preview-action/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/BitByBit-B3/cf-pr-preview-action/releases/tag/v1.0.0

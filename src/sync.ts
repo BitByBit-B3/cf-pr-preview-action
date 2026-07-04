@@ -3,30 +3,37 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as core from '@actions/core'
 import { getExecOutput } from '@actions/exec'
-import { runWrangler, wrangler, wranglerJson } from './wrangler'
+import { runWrangler, wrangler } from './wrangler'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /**
- * Clone a source (dev) D1 into the preview D1: export → reset → import, so the
- * preview mirrors dev's schema + data. Idempotent — the preview is reset first,
- * so it re-syncs cleanly on every push. Skips migrations (the dump carries the
- * schema). D1 permits one export per database at a time, so the export retries
- * with backoff if a previous export is still in flight.
+ * Sync a source (dev) D1's DATA into the preview D1. The preview D1 is recreated
+ * fresh + empty and its schema built by migrations before this runs, so we only
+ * copy rows (--no-schema) — no table drops, no schema conflicts. D1 permits one
+ * export per database at a time, so the export retries with backoff.
  */
 export async function syncD1(
   fromDb: string,
   previewDb: string,
   previewConfig: string,
 ): Promise<void> {
-  core.startGroup(`sync D1 ${fromDb} -> ${previewDb}`)
+  core.startGroup(`sync D1 data ${fromDb} -> ${previewDb}`)
   try {
     const dump = join(tmpdir(), 'cf-pr-preview-dev-d1.sql')
 
-    // 1. Export the source D1 (schema + data), retrying while a prior export runs.
+    // 1. Export the source D1's data (no schema), retrying while a prior export runs.
     let exported = false
     for (let attempt = 1; attempt <= 8; attempt++) {
-      const res = await runWrangler(['d1', 'export', fromDb, '--remote', '--output', dump])
+      const res = await runWrangler([
+        'd1',
+        'export',
+        fromDb,
+        '--remote',
+        '--no-schema',
+        '--output',
+        dump,
+      ])
       if (res.exitCode === 0) {
         exported = true
         break
@@ -36,42 +43,7 @@ export async function syncD1(
     }
     if (!exported) throw new Error(`failed to export source D1 ${fromDb} after retries`)
 
-    // 2. Reset the preview D1 — drop every user table so the import is clean.
-    //    Exclude sqlite_*/_cf_* internal tables (dropping them is denied: SQLITE_AUTH).
-    const rows = await wranglerJson<any[]>(
-      [
-        'd1',
-        'execute',
-        previewDb,
-        '--config',
-        previewConfig,
-        '--remote',
-        '--json',
-        '--command',
-        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%';",
-      ],
-      { allowFail: true },
-    )
-    const tables: string[] = (rows?.[0]?.results ?? []).map((r: any) => r.name).filter(Boolean)
-    const resetSql = join(tmpdir(), 'cf-pr-preview-reset.sql')
-    writeFileSync(
-      resetSql,
-      ['PRAGMA defer_foreign_keys=on;', ...tables.map((t) => `DROP TABLE IF EXISTS "${t}";`)].join(
-        '\n',
-      ) + '\n',
-    )
-    await wrangler([
-      'd1',
-      'execute',
-      previewDb,
-      '--config',
-      previewConfig,
-      '--remote',
-      '--file',
-      resetSql,
-    ])
-
-    // 3. Import the dump into the fresh preview D1 (defer FK checks to commit).
+    // 2. Import the data into the freshly-migrated preview D1 (defer FK checks to commit).
     const importSql = join(tmpdir(), 'cf-pr-preview-import.sql')
     writeFileSync(importSql, `PRAGMA defer_foreign_keys=on;\n${readFileSync(dump, 'utf8')}`)
     await wrangler([
@@ -84,7 +56,7 @@ export async function syncD1(
       '--file',
       importSql,
     ])
-    core.info(`synced ${tables.length} table(s) from ${fromDb} into ${previewDb}`)
+    core.info(`synced data from ${fromDb} into ${previewDb}`)
   } finally {
     core.endGroup()
   }

@@ -31,10 +31,10 @@ inputs:
     description: 'Migrations directory. Falls back to the source config binding, then "migrations".'
     default: ''
   run-migrations:
-    description: 'Apply D1 migrations to the preview database before deploy. Ignored when sync-d1-from is set.'
+    description: 'Apply D1 migrations to the preview database before deploy (and before sync-d1-from copies data).'
     default: 'true'
   sync-d1-from:
-    description: 'Clone this source D1 (name) into the preview D1 (export -> reset -> import), mirroring its schema + data. When set, migrations are skipped. Idempotent across pushes.'
+    description: 'Copy this source D1 (name) data into the preview D1. The preview D1 is recreated fresh each run and its schema built by migrations, then dev rows are imported (--no-schema). Retries around D1 export limits.'
     default: ''
   sync-r2-from:
     description: 'Sync this source R2 bucket (name) into the per-PR preview bucket over the S3 API. Requires R2 S3 credentials to be present as config vars (see r2-*-var inputs).'

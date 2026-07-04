@@ -22903,6 +22903,16 @@ async function ensureD1(dbName, location) {
     throw new Error(`failed to resolve preview D1 id for ${dbName}`);
   return found.uuid;
 }
+async function recreateD1(dbName, location) {
+  await deleteD1(dbName);
+  core2.info(`creating fresh preview D1 ${dbName}`);
+  await wrangler(["d1", "create", dbName, "--location", location]);
+  const list = await wranglerJson(["d1", "list", "--json"], { allowFail: true }) ?? [];
+  const found = list.find((d) => d.name === dbName);
+  if (!found)
+    throw new Error(`failed to resolve preview D1 id for ${dbName}`);
+  return found.uuid;
+}
 async function ensureKv(sourceKv, workerName) {
   if (!Array.isArray(sourceKv))
     return [];
@@ -23067,12 +23077,20 @@ var core5 = __toESM(require_core(), 1);
 var import_exec3 = __toESM(require_exec(), 1);
 var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function syncD1(fromDb, previewDb, previewConfig) {
-  core5.startGroup(`sync D1 ${fromDb} -> ${previewDb}`);
+  core5.startGroup(`sync D1 data ${fromDb} -> ${previewDb}`);
   try {
     const dump = import_node_path.join(import_node_os.tmpdir(), "cf-pr-preview-dev-d1.sql");
     let exported = false;
     for (let attempt = 1;attempt <= 8; attempt++) {
-      const res = await runWrangler(["d1", "export", fromDb, "--remote", "--output", dump]);
+      const res = await runWrangler([
+        "d1",
+        "export",
+        fromDb,
+        "--remote",
+        "--no-schema",
+        "--output",
+        dump
+      ]);
       if (res.exitCode === 0) {
         exported = true;
         break;
@@ -23082,32 +23100,6 @@ async function syncD1(fromDb, previewDb, previewConfig) {
     }
     if (!exported)
       throw new Error(`failed to export source D1 ${fromDb} after retries`);
-    const rows = await wranglerJson([
-      "d1",
-      "execute",
-      previewDb,
-      "--config",
-      previewConfig,
-      "--remote",
-      "--json",
-      "--command",
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%';"
-    ], { allowFail: true });
-    const tables = (rows?.[0]?.results ?? []).map((r) => r.name).filter(Boolean);
-    const resetSql = import_node_path.join(import_node_os.tmpdir(), "cf-pr-preview-reset.sql");
-    import_node_fs2.writeFileSync(resetSql, ["PRAGMA defer_foreign_keys=on;", ...tables.map((t) => `DROP TABLE IF EXISTS "${t}";`)].join(`
-`) + `
-`);
-    await wrangler([
-      "d1",
-      "execute",
-      previewDb,
-      "--config",
-      previewConfig,
-      "--remote",
-      "--file",
-      resetSql
-    ]);
     const importSql = import_node_path.join(import_node_os.tmpdir(), "cf-pr-preview-import.sql");
     import_node_fs2.writeFileSync(importSql, `PRAGMA defer_foreign_keys=on;
 ${import_node_fs2.readFileSync(dump, "utf8")}`);
@@ -23121,7 +23113,7 @@ ${import_node_fs2.readFileSync(dump, "utf8")}`);
       "--file",
       importSql
     ]);
-    core5.info(`synced ${tables.length} table(s) from ${fromDb} into ${previewDb}`);
+    core5.info(`synced data from ${fromDb} into ${previewDb}`);
   } finally {
     core5.endGroup();
   }
@@ -23173,7 +23165,7 @@ async function deploy(inputs) {
   const envBlock = getEnvBlock(cfg, inputs.configEnv);
   const subdomain = await resolveSubdomain(inputs.accountId, inputs.apiToken);
   const url = `https://${inputs.workerName}.${subdomain}.workers.dev`;
-  const dbId = await ensureD1(inputs.dbName, inputs.d1Location);
+  const dbId = inputs.syncD1From ? await recreateD1(inputs.dbName, inputs.d1Location) : await ensureD1(inputs.dbName, inputs.d1Location);
   const d1Binding = envBlock.d1_databases?.[0]?.binding ?? "DB";
   const migrationsDir = envBlock.d1_databases?.[0]?.migrations_dir || inputs.migrationsDir || "migrations";
   const kvNamespaces = inputs.isolateKv ? await ensureKv(envBlock.kv_namespaces, inputs.workerName) : envBlock.kv_namespaces ?? [];
@@ -23209,9 +23201,7 @@ async function deploy(inputs) {
     WRANGLER_COMMAND: inputs.wranglerCommand
   };
   await runHook("pre-deploy-command", inputs.preDeployCommand, inputs.shell, hookEnv);
-  if (inputs.syncD1From) {
-    await syncD1(inputs.syncD1From, inputs.dbName, inputs.outConfig);
-  } else if (inputs.runMigrations) {
+  if (inputs.runMigrations) {
     core6.info(`applying migrations to ${inputs.dbName}`);
     await wrangler([
       "d1",
@@ -23222,6 +23212,9 @@ async function deploy(inputs) {
       inputs.outConfig,
       "--remote"
     ]);
+  }
+  if (inputs.syncD1From) {
+    await syncD1(inputs.syncD1From, inputs.dbName, inputs.outConfig);
   }
   if (inputs.syncR2From) {
     const bucket = r2Buckets[0]?.bucket_name;

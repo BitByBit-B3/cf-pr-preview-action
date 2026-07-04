@@ -31,6 +31,17 @@ export async function ensureD1(dbName: string, location: string): Promise<string
   return found.uuid
 }
 
+/** Delete and recreate the per-PR D1 so it is always fresh + empty (for a clean resync). */
+export async function recreateD1(dbName: string, location: string): Promise<string> {
+  await deleteD1(dbName)
+  core.info(`creating fresh preview D1 ${dbName}`)
+  await wrangler(['d1', 'create', dbName, '--location', location])
+  const list = (await wranglerJson<any[]>(['d1', 'list', '--json'], { allowFail: true })) ?? []
+  const found = list.find((d) => d.name === dbName)
+  if (!found) throw new Error(`failed to resolve preview D1 id for ${dbName}`)
+  return found.uuid
+}
+
 /** Create per-PR KV namespaces mirroring the source bindings. */
 export async function ensureKv(sourceKv: any, workerName: string): Promise<KvBinding[]> {
   if (!Array.isArray(sourceKv)) return []
