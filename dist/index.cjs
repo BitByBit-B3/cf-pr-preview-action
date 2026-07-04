@@ -22991,7 +22991,7 @@ async function upsert(token, body) {
     repo,
     issue_number
   });
-  const existing = comments.find((c) => c.body && c.body.includes(MARKER));
+  const existing = comments.find((c) => c.body?.includes(MARKER));
   if (existing) {
     await octo.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
   } else {
