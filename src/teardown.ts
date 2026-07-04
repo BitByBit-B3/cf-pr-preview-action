@@ -1,0 +1,38 @@
+import * as core from '@actions/core'
+import type { Inputs } from './inputs'
+import { readConfig, getEnvBlock } from './config'
+import { deleteWorker, deleteD1, deleteKv, deleteR2 } from './cloudflare'
+import { runHook, type HookEnv } from './hook'
+import { postTeardownComment } from './comment'
+
+export async function teardown(inputs: Inputs): Promise<void> {
+  // The source config may be absent (e.g. teardown after a branch was deleted);
+  // tolerate it and fall back to deleting worker + D1 by name only.
+  let envBlock: any = {}
+  try {
+    envBlock = getEnvBlock(readConfig(inputs.sourceConfig), inputs.configEnv)
+  } catch (err: any) {
+    core.info(`could not read ${inputs.sourceConfig} (${err.message}); deleting by name only`)
+  }
+
+  const hookEnv: HookEnv = {
+    PREVIEW_WORKER: inputs.workerName,
+    PREVIEW_DB: inputs.dbName,
+    WRANGLER_COMMAND: inputs.wranglerCommand,
+  }
+  await runHook('pre-teardown-command', inputs.preTeardownCommand, inputs.shell, hookEnv)
+
+  await deleteWorker(inputs.workerName)
+  await deleteD1(inputs.dbName)
+  if (inputs.isolateKv) await deleteKv(envBlock.kv_namespaces, inputs.workerName)
+  if (inputs.isolateR2) await deleteR2(envBlock.r2_buckets, inputs.workerName)
+
+  core.setOutput('worker', inputs.workerName)
+  core.setOutput('db', inputs.dbName)
+
+  if (inputs.comment) {
+    await postTeardownComment(inputs.githubToken, { worker: inputs.workerName, db: inputs.dbName })
+  }
+
+  core.info(`preview torn down for PR #${inputs.prNumber}`)
+}

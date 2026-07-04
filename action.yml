@@ -1,0 +1,87 @@
+name: 'Cloudflare PR Preview'
+description: 'Per-PR ephemeral Cloudflare Worker with isolated D1/KV/R2, auto torn down on PR close. Run migrations, seed, or any command against the isolated preview.'
+author: 'BitByBit-B3'
+branding:
+  icon: 'cloud'
+  color: 'orange'
+
+inputs:
+  mode:
+    description: 'deploy | teardown | auto (auto = teardown on PR closed, deploy otherwise)'
+    default: 'auto'
+  worker-prefix:
+    description: 'Preview worker name prefix. Final name: <worker-prefix>-pr-<PR#>'
+    required: true
+  db-prefix:
+    description: 'Preview D1 name prefix. Final name: <db-prefix>-pr-<PR#>. Defaults to worker-prefix.'
+    default: ''
+  source-config:
+    description: 'Path to the source wrangler config to derive the preview from.'
+    default: 'wrangler.jsonc'
+  out-config:
+    description: 'Path to write the rendered preview wrangler config.'
+    default: 'wrangler.preview.jsonc'
+  config-env:
+    description: 'Named env block inside the source config to base the preview on (e.g. env.main).'
+    default: 'main'
+  d1-location:
+    description: 'Location hint for created preview D1 databases.'
+    default: 'apac'
+  migrations-dir:
+    description: 'Migrations directory. Falls back to the source config binding, then "migrations".'
+    default: ''
+  run-migrations:
+    description: 'Apply D1 migrations to the preview database before deploy.'
+    default: 'true'
+  isolate-kv:
+    description: 'Create per-PR KV namespaces instead of sharing the source ones.'
+    default: 'true'
+  isolate-r2:
+    description: 'Create per-PR R2 buckets instead of sharing the source ones.'
+    default: 'true'
+  preview-url-vars:
+    description: 'Comma-separated vars to set to the preview URL in the rendered config.'
+    default: 'BETTER_AUTH_URL'
+  wrangler-command:
+    description: 'Command used to invoke wrangler (e.g. "bunx wrangler", "npx wrangler", "pnpm dlx wrangler").'
+    default: 'bunx wrangler'
+  pre-deploy-command:
+    description: 'Shell command run after the preview is provisioned but before deploy. Preview env vars are injected (see README).'
+    default: ''
+  post-deploy-command:
+    description: 'Shell command run after a successful deploy. Use this to run migrations, seed data, smoke tests, or anything against the isolated preview D1/worker.'
+    default: ''
+  pre-teardown-command:
+    description: 'Shell command run before teardown (e.g. export data). Preview env vars are injected.'
+    default: ''
+  shell:
+    description: 'Shell used to run the command hooks.'
+    default: 'bash'
+  comment:
+    description: 'Post/update a sticky PR comment with the preview status.'
+    default: 'true'
+  github-token:
+    description: 'Token used to upsert the PR comment.'
+    default: '${{ github.token }}'
+  cloudflare-account-id:
+    description: 'Cloudflare account id. Prefer setting CLOUDFLARE_ACCOUNT_ID in env instead.'
+    default: ''
+  cloudflare-api-token:
+    description: 'Cloudflare API token. Prefer setting CLOUDFLARE_API_TOKEN in env instead.'
+    default: ''
+
+outputs:
+  url:
+    description: 'The workers.dev preview URL (deploy mode).'
+  worker:
+    description: 'The resolved preview worker name.'
+  db:
+    description: 'The resolved preview D1 database name.'
+  db-id:
+    description: 'The preview D1 database id (deploy mode).'
+  config:
+    description: 'Path to the rendered preview wrangler config (deploy mode).'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.cjs'
