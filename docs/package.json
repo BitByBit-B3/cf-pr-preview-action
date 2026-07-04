@@ -1,0 +1,16 @@
+{
+  "name": "cf-pr-preview-action-docs",
+  "type": "module",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview",
+    "deploy": "vitepress build && wrangler deploy"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.3",
+    "wrangler": "^4.103.0"
+  }
+}
