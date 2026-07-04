@@ -23156,7 +23156,23 @@ async function syncR2(fromBucket, toBucket, creds) {
       ""
     ].join(`
 `));
-    const code = await import_exec3.getExecOutput("rclone", ["sync", `r2:${fromBucket}`, `r2:${toBucket}`, "--config", conf, "--s3-no-check-bucket"], { ignoreReturnCode: true });
+    const code = await import_exec3.getExecOutput("rclone", [
+      "sync",
+      `r2:${fromBucket}`,
+      `r2:${toBucket}`,
+      "--config",
+      conf,
+      "--s3-no-check-bucket",
+      "--fast-list",
+      "--transfers",
+      "32",
+      "--checkers",
+      "64",
+      "--stats",
+      "15s",
+      "--stats-one-line",
+      "-v"
+    ], { ignoreReturnCode: true });
     if (code.exitCode !== 0)
       throw new Error(`rclone sync failed (exit ${code.exitCode})`);
     core5.info(`synced R2 ${fromBucket} -> ${toBucket}`);

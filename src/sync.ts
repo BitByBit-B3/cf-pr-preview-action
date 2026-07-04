@@ -120,7 +120,23 @@ export async function syncR2(fromBucket: string, toBucket: string, creds: R2Cred
 
     const code = await getExecOutput(
       'rclone',
-      ['sync', `r2:${fromBucket}`, `r2:${toBucket}`, '--config', conf, '--s3-no-check-bucket'],
+      [
+        'sync',
+        `r2:${fromBucket}`,
+        `r2:${toBucket}`,
+        '--config',
+        conf,
+        '--s3-no-check-bucket',
+        '--fast-list',
+        '--transfers',
+        '32',
+        '--checkers',
+        '64',
+        '--stats',
+        '15s',
+        '--stats-one-line',
+        '-v',
+      ],
       { ignoreReturnCode: true },
     )
     if (code.exitCode !== 0) throw new Error(`rclone sync failed (exit ${code.exitCode})`)
