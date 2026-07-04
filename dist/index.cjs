@@ -22713,11 +22713,11 @@ var require_github = __commonJS((exports2) => {
 });
 
 // src/main.ts
-var core8 = __toESM(require_core(), 1);
+var core9 = __toESM(require_core(), 1);
 
 // src/deploy.ts
-var import_node_fs2 = require("node:fs");
-var core5 = __toESM(require_core(), 1);
+var import_node_fs3 = require("node:fs");
+var core6 = __toESM(require_core(), 1);
 var github2 = __toESM(require_github(), 1);
 
 // src/cloudflare.ts
@@ -22839,9 +22839,12 @@ function baseCmd() {
   }
   return baseCache;
 }
-async function wrangler(args, opts = {}) {
+async function runWrangler(args) {
   const [cmd, ...pre] = baseCmd();
-  const res = await import_exec.getExecOutput(cmd, [...pre, ...args], { ignoreReturnCode: true });
+  return import_exec.getExecOutput(cmd, [...pre, ...args], { ignoreReturnCode: true });
+}
+async function wrangler(args, opts = {}) {
+  const res = await runWrangler(args);
   if (res.exitCode !== 0) {
     if (opts.allowFail) {
       core.info(`wrangler ${args.join(" ")} exited ${res.exitCode} (ignored)`);
@@ -23056,6 +23059,114 @@ async function runHook(name, command, shell, env) {
   }
 }
 
+// src/sync.ts
+var import_node_fs2 = require("node:fs");
+var import_node_os = require("node:os");
+var import_node_path = require("node:path");
+var core5 = __toESM(require_core(), 1);
+var import_exec3 = __toESM(require_exec(), 1);
+var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function syncD1(fromDb, previewDb, previewConfig) {
+  core5.startGroup(`sync D1 ${fromDb} -> ${previewDb}`);
+  try {
+    const dump = import_node_path.join(import_node_os.tmpdir(), "cf-pr-preview-dev-d1.sql");
+    let exported = false;
+    for (let attempt = 1;attempt <= 8; attempt++) {
+      const res = await runWrangler(["d1", "export", fromDb, "--remote", "--output", dump]);
+      if (res.exitCode === 0) {
+        exported = true;
+        break;
+      }
+      core5.info(`dev D1 export busy/failed (attempt ${attempt}); waiting 30s...`);
+      await sleep(30000);
+    }
+    if (!exported)
+      throw new Error(`failed to export source D1 ${fromDb} after retries`);
+    const rows = await wranglerJson([
+      "d1",
+      "execute",
+      previewDb,
+      "--config",
+      previewConfig,
+      "--remote",
+      "--json",
+      "--command",
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%';"
+    ], { allowFail: true });
+    const tables = (rows?.[0]?.results ?? []).map((r) => r.name).filter(Boolean);
+    const resetSql = import_node_path.join(import_node_os.tmpdir(), "cf-pr-preview-reset.sql");
+    import_node_fs2.writeFileSync(resetSql, ["PRAGMA defer_foreign_keys=on;", ...tables.map((t) => `DROP TABLE IF EXISTS "${t}";`)].join(`
+`) + `
+`);
+    await wrangler([
+      "d1",
+      "execute",
+      previewDb,
+      "--config",
+      previewConfig,
+      "--remote",
+      "--file",
+      resetSql
+    ]);
+    const importSql = import_node_path.join(import_node_os.tmpdir(), "cf-pr-preview-import.sql");
+    import_node_fs2.writeFileSync(importSql, `PRAGMA defer_foreign_keys=on;
+${import_node_fs2.readFileSync(dump, "utf8")}`);
+    await wrangler([
+      "d1",
+      "execute",
+      previewDb,
+      "--config",
+      previewConfig,
+      "--remote",
+      "--file",
+      importSql
+    ]);
+    core5.info(`synced ${tables.length} table(s) from ${fromDb} into ${previewDb}`);
+  } finally {
+    core5.endGroup();
+  }
+}
+async function syncR2(fromBucket, toBucket, creds) {
+  core5.startGroup(`sync R2 ${fromBucket} -> ${toBucket}`);
+  try {
+    const have = await import_exec3.getExecOutput("bash", ["-c", "command -v aws || true"], {
+      ignoreReturnCode: true,
+      silent: true
+    });
+    if (!have.stdout.trim()) {
+      core5.info("installing aws cli");
+      const arch = process.arch === "arm64" ? "aarch64" : "x86_64";
+      await import_exec3.getExecOutput("bash", [
+        "-c",
+        `set -e; curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${arch}.zip" -o /tmp/awscliv2.zip; unzip -q -o /tmp/awscliv2.zip -d /tmp; sudo /tmp/aws/install --update`
+      ]);
+    }
+    const env = {};
+    for (const [k, v] of Object.entries(process.env))
+      if (v !== undefined)
+        env[k] = v;
+    env.AWS_ACCESS_KEY_ID = creds.accessKeyId;
+    env.AWS_SECRET_ACCESS_KEY = creds.secretAccessKey;
+    env.AWS_DEFAULT_REGION = "auto";
+    env.AWS_EC2_METADATA_DISABLED = "true";
+    const code = await import_exec3.getExecOutput("aws", [
+      "s3",
+      "sync",
+      `s3://${fromBucket}`,
+      `s3://${toBucket}`,
+      "--endpoint-url",
+      creds.endpoint,
+      "--delete",
+      "--only-show-errors"
+    ], { env, ignoreReturnCode: true });
+    if (code.exitCode !== 0)
+      throw new Error(`aws s3 sync failed (exit ${code.exitCode})`);
+    core5.info(`synced R2 ${fromBucket} -> ${toBucket}`);
+  } finally {
+    core5.endGroup();
+  }
+}
+
 // src/deploy.ts
 async function deploy(inputs) {
   const cfg = readConfig(inputs.sourceConfig);
@@ -23081,14 +23192,14 @@ async function deploy(inputs) {
     url,
     urlVars: inputs.urlVars
   });
-  import_node_fs2.writeFileSync(inputs.outConfig, `${JSON.stringify(rendered, null, 2)}
+  import_node_fs3.writeFileSync(inputs.outConfig, `${JSON.stringify(rendered, null, 2)}
 `);
-  core5.info(`wrote ${inputs.outConfig} for ${inputs.workerName}`);
-  core5.setOutput("worker", inputs.workerName);
-  core5.setOutput("db", inputs.dbName);
-  core5.setOutput("db-id", dbId);
-  core5.setOutput("url", url);
-  core5.setOutput("config", inputs.outConfig);
+  core6.info(`wrote ${inputs.outConfig} for ${inputs.workerName}`);
+  core6.setOutput("worker", inputs.workerName);
+  core6.setOutput("db", inputs.dbName);
+  core6.setOutput("db-id", dbId);
+  core6.setOutput("url", url);
+  core6.setOutput("config", inputs.outConfig);
   const hookEnv = {
     PREVIEW_WORKER: inputs.workerName,
     PREVIEW_DB: inputs.dbName,
@@ -23098,8 +23209,10 @@ async function deploy(inputs) {
     WRANGLER_COMMAND: inputs.wranglerCommand
   };
   await runHook("pre-deploy-command", inputs.preDeployCommand, inputs.shell, hookEnv);
-  if (inputs.runMigrations) {
-    core5.info(`applying migrations to ${inputs.dbName}`);
+  if (inputs.syncD1From) {
+    await syncD1(inputs.syncD1From, inputs.dbName, inputs.outConfig);
+  } else if (inputs.runMigrations) {
+    core6.info(`applying migrations to ${inputs.dbName}`);
     await wrangler([
       "d1",
       "migrations",
@@ -23110,7 +23223,19 @@ async function deploy(inputs) {
       "--remote"
     ]);
   }
-  core5.info(`deploying preview worker ${inputs.workerName}`);
+  if (inputs.syncR2From) {
+    const bucket = r2Buckets[0]?.bucket_name;
+    const vars = rendered.vars ?? {};
+    const endpoint = vars[inputs.r2EndpointVar];
+    const accessKeyId = vars[inputs.r2AccessKeyIdVar];
+    const secretAccessKey = vars[inputs.r2SecretAccessKeyVar];
+    if (bucket && endpoint && accessKeyId && secretAccessKey) {
+      await syncR2(inputs.syncR2From, bucket, { endpoint, accessKeyId, secretAccessKey });
+    } else {
+      core6.warning("sync-r2-from set but the preview bucket or R2 S3 creds (config vars) are missing; skipping R2 sync");
+    }
+  }
+  core6.info(`deploying preview worker ${inputs.workerName}`);
   await wrangler(["deploy", "--config", inputs.outConfig]);
   await runHook("post-deploy-command", inputs.postDeployCommand, inputs.shell, hookEnv);
   if (inputs.comment) {
@@ -23122,34 +23247,34 @@ async function deploy(inputs) {
       sha
     });
   }
-  core5.info(`preview ready: ${url}`);
+  core6.info(`preview ready: ${url}`);
 }
 
 // src/inputs.ts
-var core6 = __toESM(require_core(), 1);
+var core7 = __toESM(require_core(), 1);
 var github3 = __toESM(require_github(), 1);
 function bool(name, def) {
-  const raw = core6.getInput(name);
+  const raw = core7.getInput(name);
   if (raw === "")
     return def;
   return raw.toLowerCase() === "true";
 }
 function readInputs() {
-  const workerPrefix = core6.getInput("worker-prefix", { required: true });
-  const dbPrefix = core6.getInput("db-prefix") || workerPrefix;
+  const workerPrefix = core7.getInput("worker-prefix", { required: true });
+  const dbPrefix = core7.getInput("db-prefix") || workerPrefix;
   const prNumber = github3.context.payload.pull_request?.number;
   if (!prNumber) {
     throw new Error("this action must run on a pull_request event (no PR number in context)");
   }
-  const explicit = (core6.getInput("mode") || "auto").toLowerCase();
+  const explicit = (core7.getInput("mode") || "auto").toLowerCase();
   let mode;
   if (explicit === "deploy" || explicit === "teardown") {
     mode = explicit;
   } else {
     mode = github3.context.payload.action === "closed" ? "teardown" : "deploy";
   }
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || core6.getInput("cloudflare-account-id");
-  const apiToken = process.env.CLOUDFLARE_API_TOKEN || core6.getInput("cloudflare-api-token");
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID || core7.getInput("cloudflare-account-id");
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN || core7.getInput("cloudflare-api-token");
   if (!accountId)
     throw new Error("CLOUDFLARE_ACCOUNT_ID (env or cloudflare-account-id input) is required");
   if (!apiToken)
@@ -23159,35 +23284,40 @@ function readInputs() {
     prNumber,
     workerName: `${workerPrefix}-pr-${prNumber}`,
     dbName: `${dbPrefix}-pr-${prNumber}`,
-    sourceConfig: core6.getInput("source-config") || "wrangler.jsonc",
-    outConfig: core6.getInput("out-config") || "wrangler.preview.jsonc",
-    configEnv: core6.getInput("config-env") || "main",
-    d1Location: core6.getInput("d1-location") || "apac",
-    migrationsDir: core6.getInput("migrations-dir"),
+    sourceConfig: core7.getInput("source-config") || "wrangler.jsonc",
+    outConfig: core7.getInput("out-config") || "wrangler.preview.jsonc",
+    configEnv: core7.getInput("config-env") || "main",
+    d1Location: core7.getInput("d1-location") || "apac",
+    migrationsDir: core7.getInput("migrations-dir"),
     runMigrations: bool("run-migrations", true),
     isolateKv: bool("isolate-kv", true),
     isolateR2: bool("isolate-r2", true),
-    urlVars: (core6.getInput("preview-url-vars") || "BETTER_AUTH_URL").split(",").map((s) => s.trim()).filter(Boolean),
-    wranglerCommand: core6.getInput("wrangler-command") || "bunx wrangler",
+    urlVars: (core7.getInput("preview-url-vars") || "BETTER_AUTH_URL").split(",").map((s) => s.trim()).filter(Boolean),
+    wranglerCommand: core7.getInput("wrangler-command") || "bunx wrangler",
     comment: bool("comment", true),
-    githubToken: core6.getInput("github-token"),
+    githubToken: core7.getInput("github-token"),
     accountId,
     apiToken,
-    preDeployCommand: core6.getInput("pre-deploy-command"),
-    postDeployCommand: core6.getInput("post-deploy-command"),
-    preTeardownCommand: core6.getInput("pre-teardown-command"),
-    shell: core6.getInput("shell") || "bash"
+    preDeployCommand: core7.getInput("pre-deploy-command"),
+    postDeployCommand: core7.getInput("post-deploy-command"),
+    preTeardownCommand: core7.getInput("pre-teardown-command"),
+    shell: core7.getInput("shell") || "bash",
+    syncD1From: core7.getInput("sync-d1-from"),
+    syncR2From: core7.getInput("sync-r2-from"),
+    r2EndpointVar: core7.getInput("r2-endpoint-var") || "R2_ENDPOINT",
+    r2AccessKeyIdVar: core7.getInput("r2-access-key-id-var") || "R2_ACCESS_KEY_ID",
+    r2SecretAccessKeyVar: core7.getInput("r2-secret-access-key-var") || "R2_SECRET_ACCESS_KEY"
   };
 }
 
 // src/teardown.ts
-var core7 = __toESM(require_core(), 1);
+var core8 = __toESM(require_core(), 1);
 async function teardown(inputs) {
   let envBlock = {};
   try {
     envBlock = getEnvBlock(readConfig(inputs.sourceConfig), inputs.configEnv);
   } catch (err) {
-    core7.info(`could not read ${inputs.sourceConfig} (${err.message}); deleting by name only`);
+    core8.info(`could not read ${inputs.sourceConfig} (${err.message}); deleting by name only`);
   }
   const hookEnv = {
     PREVIEW_WORKER: inputs.workerName,
@@ -23201,12 +23331,12 @@ async function teardown(inputs) {
     await deleteKv(envBlock.kv_namespaces, inputs.workerName);
   if (inputs.isolateR2)
     await deleteR2(envBlock.r2_buckets, inputs.workerName);
-  core7.setOutput("worker", inputs.workerName);
-  core7.setOutput("db", inputs.dbName);
+  core8.setOutput("worker", inputs.workerName);
+  core8.setOutput("db", inputs.dbName);
   if (inputs.comment) {
     await postTeardownComment(inputs.githubToken, { worker: inputs.workerName, db: inputs.dbName });
   }
-  core7.info(`preview torn down for PR #${inputs.prNumber}`);
+  core8.info(`preview torn down for PR #${inputs.prNumber}`);
 }
 
 // src/main.ts
@@ -23216,14 +23346,16 @@ async function run() {
     process.env.WRANGLER_COMMAND = inputs.wranglerCommand;
     process.env.CLOUDFLARE_ACCOUNT_ID = inputs.accountId;
     process.env.CLOUDFLARE_API_TOKEN = inputs.apiToken;
-    core8.setSecret(inputs.apiToken);
-    core8.info(`cf-pr-preview-action: mode=${inputs.mode} worker=${inputs.workerName} db=${inputs.dbName}`);
+    process.env.CI = process.env.CI || "1";
+    process.env.WRANGLER_SEND_METRICS = "false";
+    core9.setSecret(inputs.apiToken);
+    core9.info(`cf-pr-preview-action: mode=${inputs.mode} worker=${inputs.workerName} db=${inputs.dbName}`);
     if (inputs.mode === "teardown")
       await teardown(inputs);
     else
       await deploy(inputs);
   } catch (err) {
-    core8.setFailed(err?.message ?? String(err));
+    core9.setFailed(err?.message ?? String(err));
   }
 }
 run();

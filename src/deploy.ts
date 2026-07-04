@@ -6,6 +6,7 @@ import { postDeployComment } from './comment'
 import { getEnvBlock, readConfig, renderPreviewConfig } from './config'
 import { type HookEnv, runHook } from './hook'
 import type { Inputs } from './inputs'
+import { syncD1, syncR2 } from './sync'
 import { wrangler } from './wrangler'
 
 export async function deploy(inputs: Inputs): Promise<void> {
@@ -61,7 +62,10 @@ export async function deploy(inputs: Inputs): Promise<void> {
 
   await runHook('pre-deploy-command', inputs.preDeployCommand, inputs.shell, hookEnv)
 
-  if (inputs.runMigrations) {
+  if (inputs.syncD1From) {
+    // Clone dev's D1 into the preview (carries schema+data), so skip migrations.
+    await syncD1(inputs.syncD1From, inputs.dbName, inputs.outConfig)
+  } else if (inputs.runMigrations) {
     core.info(`applying migrations to ${inputs.dbName}`)
     await wrangler([
       'd1',
@@ -72,6 +76,21 @@ export async function deploy(inputs: Inputs): Promise<void> {
       inputs.outConfig,
       '--remote',
     ])
+  }
+
+  if (inputs.syncR2From) {
+    const bucket = r2Buckets[0]?.bucket_name
+    const vars = rendered.vars ?? {}
+    const endpoint = vars[inputs.r2EndpointVar]
+    const accessKeyId = vars[inputs.r2AccessKeyIdVar]
+    const secretAccessKey = vars[inputs.r2SecretAccessKeyVar]
+    if (bucket && endpoint && accessKeyId && secretAccessKey) {
+      await syncR2(inputs.syncR2From, bucket, { endpoint, accessKeyId, secretAccessKey })
+    } else {
+      core.warning(
+        'sync-r2-from set but the preview bucket or R2 S3 creds (config vars) are missing; skipping R2 sync',
+      )
+    }
   }
 
   core.info(`deploying preview worker ${inputs.workerName}`)

@@ -106,6 +106,27 @@ else, use the command hooks — they run with the resolved preview environment i
 Prefer your own steps? Skip the hooks and consume the [outputs](#outputs) instead
 (`url`, `worker`, `db`, `db-id`, `config`).
 
+## Seeding the preview from dev
+
+To make each preview mirror your dev environment instead of starting empty, clone dev's D1 and R2
+into the isolated per-PR copies:
+
+```yaml
+      - uses: BitByBit-B3/cf-pr-preview-action@v1
+        with:
+          worker-prefix: myapp-preview
+          sync-d1-from: myapp-dev-db        # export dev D1 -> reset -> import into preview D1
+          sync-r2-from: myapp-dev-bucket    # aws s3 sync dev bucket -> preview bucket
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+```
+
+`sync-d1-from` skips migrations (the dev dump carries the schema) and is idempotent — the preview
+D1 is reset before each import, so pushes re-sync cleanly. `sync-r2-from` reads the R2 S3 endpoint
+and keys from the rendered config vars (`R2_ENDPOINT` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`
+by default; override with the `r2-*-var` inputs).
+
 ## How it works
 
 **On `opened` / `synchronize` / `reopened` → deploy**
@@ -136,7 +157,12 @@ Mode is auto-detected from the event; override with `mode: deploy | teardown`.
 | `config-env` | `main` | `env.<name>` block to base the preview on |
 | `d1-location` | `apac` | Location hint for created D1 |
 | `migrations-dir` | *(from config)* | Migrations directory |
-| `run-migrations` | `true` | Apply D1 migrations before deploy |
+| `run-migrations` | `true` | Apply D1 migrations before deploy (ignored when `sync-d1-from` is set) |
+| `sync-d1-from` | `` | Clone this source D1 (name) into the preview D1 (schema+data); skips migrations |
+| `sync-r2-from` | `` | Sync this source R2 bucket (name) into the per-PR preview bucket (S3 API) |
+| `r2-endpoint-var` | `R2_ENDPOINT` | Config var holding the R2 S3 endpoint (for `sync-r2-from`) |
+| `r2-access-key-id-var` | `R2_ACCESS_KEY_ID` | Config var holding the R2 S3 access key id |
+| `r2-secret-access-key-var` | `R2_SECRET_ACCESS_KEY` | Config var holding the R2 S3 secret key |
 | `isolate-kv` | `true` | Create per-PR KV namespaces |
 | `isolate-r2` | `true` | Create per-PR R2 buckets |
 | `preview-url-vars` | `BETTER_AUTH_URL` | Comma-separated vars set to the preview URL |

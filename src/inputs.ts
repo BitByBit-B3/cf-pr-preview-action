@@ -26,6 +26,11 @@ export interface Inputs {
   postDeployCommand: string
   preTeardownCommand: string
   shell: string
+  syncD1From: string
+  syncR2From: string
+  r2EndpointVar: string
+  r2AccessKeyIdVar: string
+  r2SecretAccessKeyVar: string
 }
 
 function bool(name: string, def: boolean): boolean {
@@ -84,5 +89,10 @@ export function readInputs(): Inputs {
     postDeployCommand: core.getInput('post-deploy-command'),
     preTeardownCommand: core.getInput('pre-teardown-command'),
     shell: core.getInput('shell') || 'bash',
+    syncD1From: core.getInput('sync-d1-from'),
+    syncR2From: core.getInput('sync-r2-from'),
+    r2EndpointVar: core.getInput('r2-endpoint-var') || 'R2_ENDPOINT',
+    r2AccessKeyIdVar: core.getInput('r2-access-key-id-var') || 'R2_ACCESS_KEY_ID',
+    r2SecretAccessKeyVar: core.getInput('r2-secret-access-key-var') || 'R2_SECRET_ACCESS_KEY',
   }
 }

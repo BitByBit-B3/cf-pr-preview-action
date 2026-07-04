@@ -10,6 +10,9 @@ async function run(): Promise<void> {
     process.env.WRANGLER_COMMAND = inputs.wranglerCommand
     process.env.CLOUDFLARE_ACCOUNT_ID = inputs.accountId
     process.env.CLOUDFLARE_API_TOKEN = inputs.apiToken
+    // Keep wrangler non-interactive: never block on a "report this error?" prompt.
+    process.env.CI = process.env.CI || '1'
+    process.env.WRANGLER_SEND_METRICS = 'false'
     core.setSecret(inputs.apiToken)
 
     core.info(

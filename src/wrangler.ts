@@ -10,13 +10,20 @@ function baseCmd(): string[] {
   return baseCache
 }
 
+/** Run a wrangler subcommand, returning the raw exec result (exit code + output). */
+export async function runWrangler(
+  args: string[],
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const [cmd, ...pre] = baseCmd()
+  return getExecOutput(cmd, [...pre, ...args], { ignoreReturnCode: true })
+}
+
 /** Run a wrangler subcommand. Returns stdout; throws on non-zero unless allowFail. */
 export async function wrangler(
   args: string[],
   opts: { allowFail?: boolean } = {},
 ): Promise<string> {
-  const [cmd, ...pre] = baseCmd()
-  const res = await getExecOutput(cmd, [...pre, ...args], { ignoreReturnCode: true })
+  const res = await runWrangler(args)
   if (res.exitCode !== 0) {
     if (opts.allowFail) {
       core.info(`wrangler ${args.join(' ')} exited ${res.exitCode} (ignored)`)

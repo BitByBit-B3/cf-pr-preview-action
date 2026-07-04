@@ -31,8 +31,23 @@ inputs:
     description: 'Migrations directory. Falls back to the source config binding, then "migrations".'
     default: ''
   run-migrations:
-    description: 'Apply D1 migrations to the preview database before deploy.'
+    description: 'Apply D1 migrations to the preview database before deploy. Ignored when sync-d1-from is set.'
     default: 'true'
+  sync-d1-from:
+    description: 'Clone this source D1 (name) into the preview D1 (export -> reset -> import), mirroring its schema + data. When set, migrations are skipped. Idempotent across pushes.'
+    default: ''
+  sync-r2-from:
+    description: 'Sync this source R2 bucket (name) into the per-PR preview bucket over the S3 API. Requires R2 S3 credentials to be present as config vars (see r2-*-var inputs).'
+    default: ''
+  r2-endpoint-var:
+    description: 'Name of the config var holding the R2 S3 endpoint (used by sync-r2-from).'
+    default: 'R2_ENDPOINT'
+  r2-access-key-id-var:
+    description: 'Name of the config var holding the R2 S3 access key id (used by sync-r2-from).'
+    default: 'R2_ACCESS_KEY_ID'
+  r2-secret-access-key-var:
+    description: 'Name of the config var holding the R2 S3 secret access key (used by sync-r2-from).'
+    default: 'R2_SECRET_ACCESS_KEY'
   isolate-kv:
     description: 'Create per-PR KV namespaces instead of sharing the source ones.'
     default: 'true'
