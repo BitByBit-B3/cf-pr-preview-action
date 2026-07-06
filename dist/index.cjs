@@ -22996,39 +22996,40 @@ async function resolveSubdomain(accountId, token) {
     throw new Error("account has no workers.dev subdomain configured");
   return sub;
 }
+var listD1 = () => wranglerJson(["d1", "list", "--json"], { allowFail: true }).then((l) => l ?? []);
+var listKv = () => wranglerJson(["kv", "namespace", "list"], { allowFail: true }).then((l) => l ?? []);
+async function createAndResolve(label, create, list, match) {
+  core2.info(`creating ${label}`);
+  await create();
+  const hit = (await list()).find(match);
+  if (!hit)
+    throw new Error(`failed to resolve ${label} after create`);
+  return hit;
+}
 async function ensureD1(dbName, location) {
-  const list = await wranglerJson(["d1", "list", "--json"], { allowFail: true }) ?? [];
-  let found = list.find((d) => d.name === dbName);
-  if (!found) {
-    core2.info(`creating preview D1 ${dbName}`);
-    await wrangler(["d1", "create", dbName, "--location", location]);
-    const relist = await wranglerJson(["d1", "list", "--json"], { allowFail: true }) ?? [];
-    found = relist.find((d) => d.name === dbName);
-  } else {
+  const match = (d) => d.name === dbName;
+  const found = (await listD1()).find(match);
+  if (found) {
     core2.info(`reusing preview D1 ${dbName} (${found.uuid})`);
+    return found.uuid;
   }
-  if (!found)
-    throw new Error(`failed to resolve preview D1 id for ${dbName}`);
-  return found.uuid;
+  const created = await createAndResolve(`preview D1 ${dbName}`, () => wrangler(["d1", "create", dbName, "--location", location]), listD1, match);
+  return created.uuid;
 }
 async function ensureKv(sourceKv, workerName) {
   if (!Array.isArray(sourceKv))
     return [];
   const out = [];
-  const existing = await wranglerJson(["kv", "namespace", "list"], { allowFail: true }) ?? [];
+  const existing = await listKv();
   for (const ns of sourceKv) {
     const title = bindingResourceName(workerName, ns.binding);
-    let hit = existing.find((e) => e.title === title);
-    if (!hit) {
-      core2.info(`creating preview KV namespace ${title}`);
-      await wrangler(["kv", "namespace", "create", title]);
-      const relist = await wranglerJson(["kv", "namespace", "list"], { allowFail: true }) ?? [];
-      hit = relist.find((e) => e.title === title);
-    } else {
+    const match = (e) => e.title === title;
+    let hit = existing.find(match);
+    if (hit) {
       core2.info(`reusing preview KV namespace ${title} (${hit.id})`);
+    } else {
+      hit = await createAndResolve(`preview KV namespace ${title}`, () => wrangler(["kv", "namespace", "create", title]), listKv, match);
     }
-    if (!hit)
-      throw new Error(`failed to resolve preview KV id for ${title}`);
     out.push({ binding: ns.binding, id: hit.id });
   }
   return out;
@@ -23050,7 +23051,7 @@ async function deleteWorker(name) {
   await wrangler(["delete", "--name", name, "--force"], { allowFail: true });
 }
 async function deleteD1(dbName) {
-  const dbs = await wranglerJson(["d1", "list", "--json"], { allowFail: true }) ?? [];
+  const dbs = await listD1();
   if (dbs.find((d) => d.name === dbName)) {
     core2.info(`deleting preview D1 ${dbName}`);
     await wrangler(["d1", "delete", dbName, "-y"], { allowFail: true });
@@ -23061,7 +23062,7 @@ async function deleteD1(dbName) {
 async function deleteKv(sourceKv, workerName) {
   if (!Array.isArray(sourceKv))
     return;
-  const existing = await wranglerJson(["kv", "namespace", "list"], { allowFail: true }) ?? [];
+  const existing = await listKv();
   for (const ns of sourceKv) {
     const title = bindingResourceName(workerName, ns.binding);
     const hit = existing.find((e) => e.title === title);
