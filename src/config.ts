@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { parse } from 'jsonc-parser'
+import { parse } from 'jsonc-parser/lib/esm/main.js'
 
 export function parseJsonc(text: string): any {
   return parse(text, [], { allowTrailingComma: true })
