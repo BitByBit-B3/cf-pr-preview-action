@@ -14,39 +14,61 @@ export async function resolveSubdomain(accountId: string, token: string): Promis
   return sub
 }
 
+// wrangler list commands tolerate failure and may print nothing; normalize to [].
+const listD1 = () =>
+  wranglerJson<any[]>(['d1', 'list', '--json'], { allowFail: true }).then((l) => l ?? [])
+const listKv = () =>
+  wranglerJson<any[]>(['kv', 'namespace', 'list'], { allowFail: true }).then((l) => l ?? [])
+
+// Create a resource, then re-list to resolve the freshly created entry.
+// Throws if it still can't be found (create silently no-op'd or the list failed).
+async function createAndResolve<T>(
+  label: string,
+  create: () => Promise<unknown>,
+  list: () => Promise<T[]>,
+  match: (item: T) => boolean,
+): Promise<T> {
+  core.info(`creating ${label}`)
+  await create()
+  const hit = (await list()).find(match)
+  if (!hit) throw new Error(`failed to resolve ${label} after create`)
+  return hit
+}
+
 export async function ensureD1(dbName: string, location: string): Promise<string> {
-  const list = (await wranglerJson<any[]>(['d1', 'list', '--json'], { allowFail: true })) ?? []
-  let found = list.find((d) => d.name === dbName)
-  if (!found) {
-    core.info(`creating preview D1 ${dbName}`)
-    await wrangler(['d1', 'create', dbName, '--location', location])
-    const relist = (await wranglerJson<any[]>(['d1', 'list', '--json'], { allowFail: true })) ?? []
-    found = relist.find((d) => d.name === dbName)
-  } else {
+  const match = (d: any) => d.name === dbName
+  const found = (await listD1()).find(match)
+  if (found) {
     core.info(`reusing preview D1 ${dbName} (${found.uuid})`)
+    return found.uuid
   }
-  if (!found) throw new Error(`failed to resolve preview D1 id for ${dbName}`)
-  return found.uuid
+  const created = await createAndResolve(
+    `preview D1 ${dbName}`,
+    () => wrangler(['d1', 'create', dbName, '--location', location]),
+    listD1,
+    match,
+  )
+  return created.uuid
 }
 
 export async function ensureKv(sourceKv: any, workerName: string): Promise<KvBinding[]> {
   if (!Array.isArray(sourceKv)) return []
   const out: KvBinding[] = []
-  const existing =
-    (await wranglerJson<any[]>(['kv', 'namespace', 'list'], { allowFail: true })) ?? []
+  const existing = await listKv()
   for (const ns of sourceKv) {
     const title = bindingResourceName(workerName, ns.binding)
-    let hit = existing.find((e) => e.title === title)
-    if (!hit) {
-      core.info(`creating preview KV namespace ${title}`)
-      await wrangler(['kv', 'namespace', 'create', title])
-      const relist =
-        (await wranglerJson<any[]>(['kv', 'namespace', 'list'], { allowFail: true })) ?? []
-      hit = relist.find((e) => e.title === title)
-    } else {
+    const match = (e: any) => e.title === title
+    let hit = existing.find(match)
+    if (hit) {
       core.info(`reusing preview KV namespace ${title} (${hit.id})`)
+    } else {
+      hit = await createAndResolve(
+        `preview KV namespace ${title}`,
+        () => wrangler(['kv', 'namespace', 'create', title]),
+        listKv,
+        match,
+      )
     }
-    if (!hit) throw new Error(`failed to resolve preview KV id for ${title}`)
     out.push({ binding: ns.binding, id: hit.id })
   }
   return out
@@ -70,7 +92,7 @@ export async function deleteWorker(name: string): Promise<void> {
 }
 
 export async function deleteD1(dbName: string): Promise<void> {
-  const dbs = (await wranglerJson<any[]>(['d1', 'list', '--json'], { allowFail: true })) ?? []
+  const dbs = await listD1()
   if (dbs.find((d) => d.name === dbName)) {
     core.info(`deleting preview D1 ${dbName}`)
     await wrangler(['d1', 'delete', dbName, '-y'], { allowFail: true })
@@ -81,8 +103,7 @@ export async function deleteD1(dbName: string): Promise<void> {
 
 export async function deleteKv(sourceKv: any, workerName: string): Promise<void> {
   if (!Array.isArray(sourceKv)) return
-  const existing =
-    (await wranglerJson<any[]>(['kv', 'namespace', 'list'], { allowFail: true })) ?? []
+  const existing = await listKv()
   for (const ns of sourceKv) {
     const title = bindingResourceName(workerName, ns.binding)
     const hit = existing.find((e) => e.title === title)
