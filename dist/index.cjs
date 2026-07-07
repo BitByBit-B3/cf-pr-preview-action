@@ -23833,6 +23833,21 @@ var import_node_path = require("node:path");
 var core5 = __toESM(require_core(), 1);
 var import_exec3 = __toESM(require_exec(), 1);
 var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function reorderDdlBeforeDml(sql) {
+  const ddl = [];
+  const dml = [];
+  for (const line of sql.split(`
+`)) {
+    if (/^INSERT INTO/i.test(line)) {
+      dml.push(line);
+    } else {
+      ddl.push(line);
+    }
+  }
+  return ["PRAGMA foreign_keys=OFF;", ...ddl, ...dml].join(`
+`) + `
+`;
+}
 async function syncD1(fromDb, previewDb, previewConfig) {
   core5.startGroup(`sync D1 ${fromDb} -> ${previewDb}`);
   try {
@@ -23849,6 +23864,8 @@ async function syncD1(fromDb, previewDb, previewConfig) {
     }
     if (!exported)
       throw new Error(`failed to export source D1 ${fromDb} after retries`);
+    const reordered = import_node_path.join(import_node_os.tmpdir(), "cf-pr-preview-dev-d1-reordered.sql");
+    import_node_fs2.writeFileSync(reordered, reorderDdlBeforeDml(import_node_fs2.readFileSync(dump, "utf8")));
     const rows = await wranglerJson([
       "d1",
       "execute",
@@ -23889,7 +23906,7 @@ async function syncD1(fromDb, previewDb, previewConfig) {
       previewConfig,
       "--remote",
       "--file",
-      dump
+      reordered
     ]);
     core5.info(`cloned ${fromDb} into ${previewDb}`);
   } finally {

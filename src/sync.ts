@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as core from '@actions/core'
@@ -6,6 +6,22 @@ import { getExecOutput } from '@actions/exec'
 import { runWrangler, wrangler, wranglerJson } from './wrangler'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+// D1 export interleaves CREATE+INSERT per table, so a FK-target table can be
+// inserted into before it's created (e.g. `workers` -> `cycles`), failing
+// with "no such table". Reorder so every CREATE runs before any INSERT.
+function reorderDdlBeforeDml(sql: string): string {
+  const ddl: string[] = []
+  const dml: string[] = []
+  for (const line of sql.split('\n')) {
+    if (/^INSERT INTO/i.test(line)) {
+      dml.push(line)
+    } else {
+      ddl.push(line)
+    }
+  }
+  return ['PRAGMA foreign_keys=OFF;', ...ddl, ...dml].join('\n') + '\n'
+}
 
 export async function syncD1(
   fromDb: string,
@@ -27,6 +43,9 @@ export async function syncD1(
       await sleep(30_000)
     }
     if (!exported) throw new Error(`failed to export source D1 ${fromDb} after retries`)
+
+    const reordered = join(tmpdir(), 'cf-pr-preview-dev-d1-reordered.sql')
+    writeFileSync(reordered, reorderDdlBeforeDml(readFileSync(dump, 'utf8')))
 
     const rows = await wranglerJson<any[]>(
       [
@@ -73,7 +92,7 @@ export async function syncD1(
       previewConfig,
       '--remote',
       '--file',
-      dump,
+      reordered,
     ])
     core.info(`cloned ${fromDb} into ${previewDb}`)
   } finally {
